@@ -1,0 +1,88 @@
+@page "/reports/company-insurance-report"
+@page "/reports/company-insurance-report/{*InsurancePdfUrl}"
+@inject ILogger<CompanyInsuranceReport> Logger
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@rendermode InteractiveWebAssembly
+
+@if (!string.IsNullOrWhiteSpace(InsurancePdfUrl) || !string.IsNullOrWhiteSpace(InsurancePdfUrlQuery))
+{
+    <LoadingIndicator Visible="@isBusy">
+        <Card Style="width:8.27in; min-height:11.69in; margin:auto;  border:none;">
+            <CardBody>
+                   <div style="height:100vh; min-height:11.69in; width:100%;">
+                    <iframe
+                        style="display:block; width:100%; height:100%; border:none;"
+                        src="@PdfSrc"
+                        title="Insurance PDF">
+                    </iframe>
+                </div>
+            </CardBody>
+        </Card>
+    </LoadingIndicator>
+}
+else
+{
+    <div class="alert alert-warning">No PDF URL provided.</div>
+}
+
+@code {
+    [Parameter] public string? InsurancePdfUrl { get; set; }
+    [SupplyParameterFromQuery(Name = "url")] public string? InsurancePdfUrlQuery { get; set; }
+
+    private bool isBusy = true;
+
+    private string PdfSrc => BuildPdfSrc();
+
+    protected override void OnParametersSet()
+    {
+        // reset busy state when parameters change
+        isBusy = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Keep UX consistent without JS: allow the viewer a moment to render, then hide loader
+        if (isBusy && !string.IsNullOrWhiteSpace(PdfSrc))
+        {
+            try
+            {
+                // Optional lightweight probe (headers only) to ensure reachability
+                // This avoids JS while giving the iframe time to load.
+                using var req = new HttpRequestMessage(HttpMethod.Get, PdfSrc);
+                using var _ = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+            }
+            catch { /* ignore - keep UX flowing */ }
+
+            await Task.Delay(300); // small delay to avoid flash of loader
+            isBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private string BuildPdfSrc()
+    {
+        // Prefer route param, fallback to query string
+        var raw = !string.IsNullOrWhiteSpace(InsurancePdfUrl) ? InsurancePdfUrl : InsurancePdfUrlQuery;
+        if (string.IsNullOrWhiteSpace(raw))
+            return string.Empty;
+
+        try
+        {
+            // Keep original scheme; proxy avoids mixed-content issues even for http
+            var absolute = Uri.TryCreate(raw, UriKind.Absolute, out var u)
+                ? u.ToString()
+                : Navigation.ToAbsoluteUri(raw).ToString();
+
+            var encoded = Uri.EscapeDataString(absolute);
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            // Hide toolbar to remove editing/draw controls
+            return $"{baseUri}/api/proxy/pdf?url={encoded}#toolbar=0&navpanes=0&statusbar=0";
+        }
+        catch (Exception ex)
+        {
+            try { Logger.LogWarning(ex, "Invalid InsurancePdfUrl: {Url}", raw); } catch { }
+            return string.Empty;
+        }
+    }
+}

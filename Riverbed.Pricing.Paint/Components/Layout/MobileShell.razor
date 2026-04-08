@@ -1,0 +1,72 @@
+@rendermode InteractiveServer
+@using Blazorise
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Services
+@inject ThemeService ThemeService
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserManager<ApplicationUser> UserManager
+
+<LayoutHeader class="d-flex d-md-none" style="background-color: var(--bs-secondary-bg); border-bottom: 1px solid var(--bs-border-color);">
+    <Bar Mode="BarMode.Horizontal"
+         Breakpoint="Breakpoint.None"
+         Background="Background.Transparent"
+         ThemeContrast="ThemeContrast.Light"
+         Class="w-100 justify-content-between">
+        <BarStart>
+            <BarBrand>
+                <Text TextWeight="TextWeight.Bold" Style="color: var(--bs-body-color);">QUOTED</Text>
+            </BarBrand>
+        </BarStart>
+
+        <BarEnd>
+            <BarItem>
+                <Button Color="Color.Link" Clicked="ToggleDarkMode" title="@(ThemeService.IsDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode")">
+                    <Icon Name="@(ThemeService.IsDarkMode ? "fa-sun" : "fa-moon")" IconSize="IconSize.Default" />
+                </Button>
+            </BarItem>
+            <BarToggler Clicked="@ToggleSidebar" />
+        </BarEnd>
+    </Bar>
+</LayoutHeader>
+
+<Offcanvas @ref="sidebarRef" Placement="Placement.Start">
+    <OffcanvasHeader>
+        <CloseButton Clicked="@CloseSidebar" />
+    </OffcanvasHeader>
+    <OffcanvasBody>
+        <NavMenu OnNavigated="@CloseSidebar" />
+    </OffcanvasBody>
+</Offcanvas>
+
+@code {
+    private Offcanvas sidebarRef = null!;
+    private Task ToggleSidebar() => sidebarRef.Show();
+    private Task CloseSidebar() => sidebarRef.Hide();
+
+    private async Task ToggleDarkMode()
+    {
+        ThemeService.IsDarkMode = !ThemeService.IsDarkMode;
+        var value = ThemeService.IsDarkMode ? "dark" : "light";
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-bs-theme", value);
+
+        // Persist to database for the authenticated user
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var principal = authState.User;
+            if (principal.Identity?.IsAuthenticated == true)
+            {
+                var appUser = await UserManager.GetUserAsync(principal);
+                if (appUser is not null)
+                {
+                    appUser.IsDarkMode = ThemeService.IsDarkMode;
+                    await UserManager.UpdateAsync(appUser);
+                }
+            }
+        }
+        catch { }
+    }
+}

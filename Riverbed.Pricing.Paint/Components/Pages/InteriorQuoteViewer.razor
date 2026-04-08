@@ -1,0 +1,97 @@
+﻿@page "/quote-report"
+@using Microsoft.EntityFrameworkCore
+@using DevExpress.XtraReports.UI
+@using DevExpress.Blazor.Reporting
+@using DevExpress.Utils
+@using System.Drawing
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Data
+@inject PricingDbContext Db
+
+@rendermode InteractiveServer
+
+<link href="_content/DevExpress.Blazor.Themes/blazing-berry.bs5.css" rel="stylesheet" />
+<link href="_content/DevExpress.Blazor.Reporting.Viewer/css/dx-blazor-reporting-components.bs5.css" rel="stylesheet" />
+
+<h3>Quote Report Viewer</h3>
+
+<!-- Project Selection Dropdown -->
+<select value="@SelectedProjectGuid" @onchange="OnProjectChanged">
+    @foreach (var project in Projects)
+    {
+        <option value="@project.ProjectGuid">@project.ProjectName</option>
+    }
+</select>
+
+<!-- DevExpress Report Viewer -->
+<DxReportViewer Report="@quoteReport" />
+
+@code {
+    private XtraReport quoteReport;
+    private Guid SelectedProjectGuid;
+    private List<ProjectInfo> Projects = new();
+      
+    private class ProjectInfo
+    {
+        public Guid ProjectGuid { get; set; }
+        public string ProjectName { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Retrieve all projects
+        Projects = await Db.Projects
+            .Select(p => new ProjectInfo {ProjectGuid = p.ProjectGuid, ProjectName = p.ProjectName })
+            .OrderBy(p => p.ProjectName)
+            .ToListAsync();
+
+        if (Projects?.Any() == true)
+        {   
+            // Extract the project Guid from the first project
+            SelectedProjectGuid = Projects.First().ProjectGuid;
+            quoteReport = await GenerateReport(SelectedProjectGuid);
+        }
+    }
+
+    private async Task OnProjectChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        // Convert the new selection to a Guid
+        if (Guid.TryParse(e.Value?.ToString(), out var newGuid))
+        {
+            SelectedProjectGuid = newGuid;
+            // Re-generate the report for the newly selected project
+            quoteReport = await GenerateReport(newGuid);
+        }
+    }
+        
+    private Task<XtraReport> GenerateReport(Guid projectGuid)
+    {
+        // Create an instance of your predefined DevExpress report
+        //var report = new CustomerProjectQuoteVI();
+        var report = new CustomerQuote();
+
+        // Pass the project GUID through a parameter
+        // (Ensure that your 'CustomerProjectQuoteVI' report has a matching "CustomerProjectGuid" parameter)
+        if (report.Parameters["CustomerProjectGuid"] is DevExpress.XtraReports.Parameters.Parameter param)
+        {
+            param.Value = projectGuid;
+            // Optional: Suppress any parameter prompt
+            report.RequestParameters = false;
+        }
+        if(report.Parameters["DiscountAmount"] is DevExpress.XtraReports.Parameters.Parameter projectDiscountParam)
+        {
+            // Set a default value for the discount amount parameter
+            projectDiscountParam.Value = 0; // or any default value you want
+            // Set the project name parameter if it exists
+            var project = Db.Projects.FirstOrDefault(p => p.ProjectGuid == projectGuid);
+            var projectDiscountAmount = Db.Adjustments.Where(a => a.ProjectDataId == project.Id && a.Type == AdjustmentType.Discount).FirstOrDefault();
+            projectDiscountParam.Value = projectDiscountAmount == null ? 0 : projectDiscountAmount.Value;
+            report.RequestParameters = false; // Suppress parameter prompts
+        }
+
+        // If needed, force the report document creation
+        // report.CreateDocument();
+
+        return Task.FromResult<XtraReport>(report);
+    }
+}

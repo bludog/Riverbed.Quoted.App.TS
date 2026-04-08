@@ -1,0 +1,36 @@
+@page "/"
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILoadingIndicatorService ApplicationLoadingIndicatorService
+@inject ILogger<Home> Logger
+@rendermode InteractiveWebAssembly
+
+<h1>Loading...</h1>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await ApplicationLoadingIndicatorService.Show();
+        Logger.LogInformation("Home.OnInitializedAsync LoadingIndicator.Show");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+		Logger.BeginScope("Home.OnAfterRenderAsync");
+        if (firstRender)
+        {
+			Logger.LogInformation("Home.OnAfterRenderAsync firstRender");
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (!authState.User.Identity.IsAuthenticated)
+            {
+				Logger.LogInformation("Home.OnAfterRenderAsync User not authenticated, redirecting to Login");
+                NavigationManager.NavigateTo("Account/Login", true);
+            }
+            else
+            {
+				Logger.LogInformation("Home.OnAfterRenderAsync User authenticated, redirecting to Quoted Projects");
+                NavigationManager.NavigateTo("dashboard");
+            }
+        }
+    }
+}

@@ -1,0 +1,319 @@
+﻿@page "/dashboard"
+
+@using Blazorise
+@using Riverbed.Pricing.Paint.Shared.Data
+
+@attribute [Authorize]
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthProvider
+@inject IJSRuntime JSRuntime
+@inject ILogger<Dashboard> Logger
+@inject IPricingService AppService
+@rendermode InteractiveWebAssembly
+
+<PageTitle>@companyName Dashboard</PageTitle>
+
+<LoadingIndicator @ref="loadingIndicator" FullScreen>
+    @if (isLoaded)
+    {
+        <!-- Company Header -->
+        <Card Class="mb-4">
+            <CardBody Background="Background.Primary" Class="text-white">
+                <Div Class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <Div>
+                        <Heading Size="HeadingSize.Is2" Class="mb-0 text-white">@companyName</Heading>
+                        <Text Class="text-white-50">Dashboard</Text>
+                    </Div>
+                    <Div Class="d-flex gap-2 flex-wrap">
+                        <Button Color="Color.Light" Clicked="OpenProjectTracker">
+                            <Icon Name="IconName.Globe" /> Project Tracker
+                        </Button>
+                        <Button Color="Color.Light" Clicked="@(() => NavigationManager.NavigateTo("company-customer-list"))">
+                            <Icon Name="IconName.User" /> Customer List
+                        </Button>
+                        <Button Color="Color.Light" Clicked="@(() => NavigationManager.NavigateTo("project/quoted-projects"))">
+                            <Icon Name="IconName.Folder" /> Project List
+                        </Button>
+                    </Div>
+                </Div>
+            </CardBody>
+        </Card>
+
+        <!-- Statistics Cards - Current Year -->
+        <Heading Size="HeadingSize.Is4" Class="mb-3">
+            <Icon Name="IconName.CalendarDay" /> Year to Date (@DateTime.Now.Year)
+        </Heading>
+        <Row Class="mb-4">           
+                 <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-info fw-bold">@completedJobsYear</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Completed Jobs</Heading>
+                        <Text Class="text-info">@completedJobsTotalYear.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-success fw-bold">@wonQuotesYear</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Won Quotes</Heading>
+                        <Text Class="text-success">@wonQuotesTotalYear.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-primary fw-bold">@activeQuotesYear</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Active Quotes</Heading>
+                        <Text Class="text-primary">@activeQuotesTotalYear.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column> 
+           
+        </Row>
+
+        <!-- Statistics Cards - Current Month -->
+        <Heading Size="HeadingSize.Is4" Class="mb-3">
+            <Icon Name="IconName.Calendar" /> This Month (@DateTime.Now.ToString("MMMM yyyy"))
+        </Heading>
+        <Row Class="mb-4">
+            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-success fw-bold">@wonQuotesMonth</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Won Quotes</Heading>
+                        <Text Class="text-success">@wonQuotesTotalMonth.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-primary fw-bold">@activeQuotesMonth</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Active Quotes</Heading>
+                        <Text Class="text-primary">@activeQuotesTotalMonth.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column>
+            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
+                <Card Class="h-100">
+                    <CardBody Class="text-center">
+                        <Div Class="display-4 text-info fw-bold">@completedJobsMonth</Div>
+                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Completed Jobs</Heading>
+                        <Text Class="text-info">@completedJobsTotalMonth.ToString("C")</Text>
+                    </CardBody>
+                </Card>
+            </Column>
+        </Row>
+
+        <!-- Project Lists -->
+        <Row>
+            <!-- Won Projects -->
+            <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile" Class="mb-4">
+                <Card Class="h-100">
+                    <CardHeader Background="Background.Success" Class="text-white">
+                        <Heading Size="HeadingSize.Is5" Class="mb-0 text-white">
+                            <Icon Name="IconName.CheckCircle" /> Won Projects
+                        </Heading>
+                    </CardHeader>
+                    <CardBody Style="max-height: 400px; overflow-y: auto;">
+                        @if (wonProjects.Any())
+                        {
+                            <ListGroup Flush>
+                                @foreach (var project in wonProjects)
+                                {
+                                    <ListGroupItem Clicked="@(() => NavigateToProject(project.ProjectGuid))" Style="cursor: pointer;">
+                                        <Div Class="d-flex justify-content-between align-items-center">
+                                            <Div>
+                                                <Text TextWeight="TextWeight.Bold">@project.ProjectName</Text>
+                                                <br />
+                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">@project.CustomerName</Text>
+                                            </Div>
+                                            <Div Class="text-end">
+                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">
+                                                    @project.CreatedDate.ToString("MMM d, yyyy")
+                                                </Text>
+                                                <Icon Name="IconName.ChevronRight" Class="ms-2" />
+                                            </Div>
+                                        </Div>
+                                    </ListGroupItem>
+                                }
+                            </ListGroup>
+                        }
+                        else
+                        {
+                            <Paragraph TextColor="TextColor.Muted" Class="text-center py-3">
+                                No won projects in the last 2 months
+                            </Paragraph>
+                        }
+                    </CardBody>
+                </Card>
+            </Column>
+
+            <!-- Pending Projects (Last 2 Months) -->
+            <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile" Class="mb-4">
+                <Card Class="h-100">
+                    <CardHeader Background="Background.Primary" Class="text-white">
+                        <Heading Size="HeadingSize.Is5" Class="mb-0 text-white">
+                            <Icon Name="IconName.Clock" /> Pending Projects (Last 2 Months)
+                        </Heading>
+                    </CardHeader>
+                    <CardBody Style="max-height: 400px; overflow-y: auto;">
+                        @if (pendingProjects.Any())
+                        {
+                            <ListGroup Flush>
+                                @foreach (var project in pendingProjects)
+                                {
+                                    <ListGroupItem Clicked="@(() => NavigateToProject(project.ProjectGuid))" Style="cursor: pointer;">
+                                        <Div Class="d-flex justify-content-between align-items-center">
+                                            <Div>
+                                                <Text TextWeight="TextWeight.Bold">@project.ProjectName</Text>
+                                                <br />
+                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">@project.CustomerName</Text>
+                                            </Div>
+                                            <Div Class="text-end">
+                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">
+                                                    @project.CreatedDate.ToString("MMM d, yyyy")
+                                                </Text>
+                                                <Icon Name="IconName.ChevronRight" Class="ms-2" />
+                                            </Div>
+                                        </Div>
+                                    </ListGroupItem>
+                                }
+                            </ListGroup>
+                        }
+                        else
+                        {
+                            <Paragraph TextColor="TextColor.Muted" Class="text-center py-3">
+                                No pending projects in the last 2 months
+                            </Paragraph>
+                        }
+                    </CardBody>
+                </Card>
+            </Column>
+        </Row>
+    }
+</LoadingIndicator>
+
+@code {
+    private LoadingIndicator loadingIndicator;
+    private bool isLoaded = false;
+    private string companyName = string.Empty;
+    private string companyGuid = string.Empty;
+
+    // Year statistics
+    private int wonQuotesYear = 0;
+    private decimal wonQuotesTotalYear = 0;
+    private int activeQuotesYear = 0;
+    private decimal activeQuotesTotalYear = 0;
+    private int completedJobsYear = 0;
+    private decimal completedJobsTotalYear = 0;
+
+    // Month statistics
+    private int wonQuotesMonth = 0;
+    private decimal wonQuotesTotalMonth = 0;
+    private int activeQuotesMonth = 0;
+    private decimal activeQuotesTotalMonth = 0;
+    private int completedJobsMonth = 0;
+    private decimal completedJobsTotalMonth = 0;
+
+    // Project lists
+    private List<ProjectDataMinimal> wonProjects = new();
+    private List<ProjectDataMinimal> pendingProjects = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        if (!authState.User.Identity?.IsAuthenticated ?? true)
+        {
+            NavigationManager.NavigateTo("Account/Login");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await loadingIndicator.Show();
+                await LoadDashboardData();
+            }
+            finally
+            {
+                await loadingIndicator.Hide();
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadDashboardData()
+    {
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user?.Identity?.IsAuthenticated != true)
+            {
+                Logger.LogWarning("User not authenticated");
+                NavigationManager.NavigateTo("Account/Login");
+                return;
+            }
+
+            var userEmail = user.Identity.Name;
+            companyGuid = await AppService.GetUserCompanyGuidAsync(userEmail ?? "");
+
+            if (string.IsNullOrEmpty(companyGuid))
+            {
+                Logger.LogWarning("No company found for user {Email}", userEmail);
+                return;
+            }
+
+            // Load dashboard data from server
+            var dashboardData = await AppService.GetDashboardDataAsync(companyGuid);
+
+            // Map data to component fields
+            companyName = dashboardData.CompanyName;
+
+            // Year statistics
+            wonQuotesYear = dashboardData.WonQuotesYear;
+            wonQuotesTotalYear = dashboardData.WonQuotesTotalYear;
+            activeQuotesYear = dashboardData.ActiveQuotesYear;
+            activeQuotesTotalYear = dashboardData.ActiveQuotesTotalYear;
+            completedJobsYear = dashboardData.CompletedJobsYear;
+            completedJobsTotalYear = dashboardData.CompletedJobsTotalYear;
+
+            // Month statistics
+            wonQuotesMonth = dashboardData.WonQuotesMonth;
+            wonQuotesTotalMonth = dashboardData.WonQuotesTotalMonth;
+            activeQuotesMonth = dashboardData.ActiveQuotesMonth;
+            activeQuotesTotalMonth = dashboardData.ActiveQuotesTotalMonth;
+            completedJobsMonth = dashboardData.CompletedJobsMonth;
+            completedJobsTotalMonth = dashboardData.CompletedJobsTotalMonth;
+
+            // Project lists
+            wonProjects = dashboardData.WonProjects;
+            pendingProjects = dashboardData.PendingProjects;
+
+            isLoaded = true;
+            Logger.LogInformation("Dashboard loaded for company {CompanyName}", companyName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading dashboard data");
+        }
+    }
+
+    private void NavigateToProject(Guid projectGuid)
+    {
+        NavigationManager.NavigateTo($"pricing/projectentrymain/{projectGuid}");
+    }
+
+    private async Task OpenProjectTracker()
+    {
+        await JSRuntime.InvokeVoidAsync("window.open", $"https://bludog-software.com/rbt/projects/{companyGuid}", "_blank");
+    }
+}

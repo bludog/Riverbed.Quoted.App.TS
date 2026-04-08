@@ -1,0 +1,206 @@
+@page "/companydefaultscomponent"
+
+@inject HttpClient Http
+@inject ILogger<CompanyDefaultsComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    @{
+        if (CompanyGuid != null)
+        {
+            <h3>Company Defaults</h3>
+            <CompanyDefaultsEditForm companyDefaults="@companydefaults" PaintTypes="PaintTypes" OnSaveCompanyDefaults="@SaveCompanyDefaults" />
+        }
+        else
+        {
+            <DxGrid Data="@companydefaultss"
+                    EditModelSaving="Grid_EditModelSaving"
+                    DataItemDeleting="Grid_DataItemDeleting"
+                    EditMode="GridEditMode.PopupEditForm"
+                    @ref="MyGrid">
+                <Columns>
+                    <DxGridDataColumn FieldName="Baseboards" Caption="Baseboards" />
+                    <DxGridDataColumn FieldName="Ceilings" Caption="Ceilings" />
+                    <DxGridDataColumn FieldName="Doors" Caption="Doors" />
+                    <DxGridDataColumn FieldName="Walls" Caption="Walls" />
+                    <DxGridDataColumn FieldName="Windows" Caption="Windows" />                   
+                    <DxGridDataColumn FieldName="PaintTypeWallsId" Caption="Wall Default">
+                        <CellDisplayTemplate>
+                            @{
+                                var paintTypeId = ((CompanyDefaults)context.DataItem).PaintTypeWallsId;
+                                var paintType = PaintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                                if (paintType != null)
+                                {
+                                    <span>@paintType.PaintTypeName</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintTypeCeilingsId" Caption="Ceiling Default">
+                        <CellDisplayTemplate>
+                            @{
+                                var paintTypeId = ((CompanyDefaults)context.DataItem).PaintTypeCeilingsId;
+                                var paintType = PaintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                                if (paintType != null)
+                                {
+                                    <span>@paintType.PaintTypeName</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintTypeTrimDoorsId" Caption="Doors Default">
+                        <CellDisplayTemplate>
+                            @{
+                                var paintTypeId = ((CompanyDefaults)context.DataItem).PaintTypeTrimDoorsId;
+                                var paintType = PaintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                                if (paintType != null)
+                                {
+                                    <span>@paintType.PaintTypeName</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintTypeBaseboardsId" Caption="Baseboards Default">
+                        <CellDisplayTemplate>
+                            @{
+                                var paintTypeId = ((CompanyDefaults)context.DataItem).PaintTypeBaseboardsId;
+                                var paintType = PaintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                                if (paintType != null)
+                                {
+                                    <span>@paintType.PaintTypeName</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintTypeWindowsId" Caption="Windows Default">
+                        <CellDisplayTemplate>
+                            @{
+                                var paintTypeId = ((CompanyDefaults)context.DataItem).PaintTypeWindowsId;
+                                var paintType = PaintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                                if (paintType != null)
+                                {
+                                    <span>@paintType.PaintTypeName</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridCommandColumn Width="60px">
+                        <HeaderTemplate>
+                            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                        </HeaderTemplate>
+                        <CellDisplayTemplate>
+                            @{
+                                <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                                <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+
+                </Columns>
+
+                <EditFormTemplate Context="EditFormContext">
+                    @{
+                        var newCompanyDefaults = (CompanyDefaults)EditFormContext.EditModel;
+                    }
+                    <CompanyDefaultsEditForm companyDefaults="@newCompanyDefaults" PaintTypes="PaintTypes" isGridEdit="true" OnSaveCompanyDefaults="@SaveCompanyDefaults" />
+                </EditFormTemplate>
+
+            </DxGrid>
+        }
+    }
+</LoadingIndicator>
+
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; } = null;
+    public List<CompanyDefaults> companydefaultss { get; set; }
+    public CompanyDefaults companydefaults { get; set; } = new CompanyDefaults();
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+    public List<CompanyPaintType> PaintTypes { get; set; }
+    public List<PaintSheen> PaintSheens { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(CompanyGuid))
+        {
+            await UpdateData();
+        }
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var companydefaults = (CompanyDefaults)args.EditModel;
+        await SaveCompanyDefaults(companydefaults);
+    }
+
+    async Task SaveCompanyDefaults(CompanyDefaults companydefaults)
+    {
+        if (companydefaults.Id == 0)
+        {
+            await pricingService.CreateCompanyDefaultsAsync(companydefaults);
+        }
+        else
+        {
+            await pricingService.UpdateCompanyDefaultsAsync(companydefaults);
+        }
+        UpdateData();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        await pricingService.DeleteCompanyDefaultsAsync(((CompanyDefaults)args.DataItem).Id);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        if (CompanyGuid != null)
+        {
+            companydefaults = await pricingService.GetCompanyDefaultsAsync(CompanyGuid);
+
+            // If no CompanyDefaults exist yet, create a default record
+            if (companydefaults == null)
+            {
+                companydefaults = new CompanyDefaults
+                {
+                    CompanyId = Guid.Parse(CompanyGuid),
+                    Baseboards = true,
+                    Ceilings = true,
+                    Doors = true,
+                    Walls = true,
+                    Windows = true,
+                    TrimDoors = true
+                };
+                await pricingService.CreateCompanyDefaultsAsync(companydefaults);
+                companydefaults = await pricingService.GetCompanyDefaultsAsync(CompanyGuid);
+            }
+        }
+        else
+        {
+            companydefaultss = await pricingService.GetAllCompanyDefaultsAsync();
+        }
+
+        PaintTypes = await pricingService.GetAllCompanyPaintTypesAsync(CompanyGuid);
+        PaintSheens = await pricingService.GetAllPaintSheensAsync();
+        foreach (var paintType in PaintTypes)
+        {
+            paintType.PaintSheen = PaintSheens.FirstOrDefault(x => x.Id == paintType.PaintSheenId);
+            paintType.PaintTypeName = $"{paintType.PaintTypeName} ({paintType.PaintSheen.PaintSheenName})";
+        }
+        isBusy = false;
+        StateHasChanged();
+    }
+}
+

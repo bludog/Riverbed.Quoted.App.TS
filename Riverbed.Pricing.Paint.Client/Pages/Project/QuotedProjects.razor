@@ -1,0 +1,259 @@
+@page "/project/quoted-projects"
+@rendermode InteractiveWebAssembly
+
+@using Blazorise
+@using Riverbed.Pricing.Paint.Shared.Data
+@inject IPricingService PricingService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+
+<Layout>
+    <LayoutContent>
+        <!-- Sticky header row with link to CompanyCustomerList on the right -->
+        <Div Class="sticky-top bg-white border-bottom">
+            <Div Class="container">
+                <Div Class="row py-2">
+                    <Div Class="col text-end">
+                        <a href="company-customer-list" class="btn btn-link">Customer List</a>
+                    </Div>
+                </Div>
+            </Div>
+        </Div>
+
+        <Div Class="container py-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <Heading Size="HeadingSize.Is2" Class="mb-0">Quoted Projects</Heading>
+
+                <div class="d-flex align-items-center">
+                    <Switch TValue="bool" Checked="showAcceptedOnly" CheckedChanged="OnShowAcceptedOnlyChanged" Color="Color.Primary" Size="Size.Large" />
+                    <span class="ms-2">Show Accepted Only</span>
+                </div>
+            </div>
+
+            @if (isLoading)
+            {
+                <Div Class="text-center my-5">
+                    <Spinner Color="Color.Primary" />
+                </Div>
+            }
+            else if (loadError)
+            {
+                <Div Class="text-danger">@errorMessage</Div>
+            }
+            else
+            {
+                var displayWeeks = groupedWeeks.ToList();
+                if (!displayWeeks.Any())
+                {
+                    <Div Class="text-muted">No projects found.</Div>
+                }
+                else
+                {
+                    @foreach (var week in displayWeeks)
+                    {
+                        <Heading Size="HeadingSize.Is4" Class="mt-4 mb-3">@week.Label</Heading>
+                        <Row Class="g-3">
+                            @foreach (var p in week.Projects)
+                            {
+                                <Div Class="col-12 col-md-6">
+                                    <Card Class="h-100">
+                                        <CardBody>
+                                            <a href="@GetProjectUrl(p.ProjectGuid)"
+                                               @onclick="(e) => NavigateToProject(p.ProjectGuid)"
+                                               @onclick:preventDefault
+                                               style="text-decoration:none; color:inherit; display:block;">
+                                                <Heading Size="HeadingSize.Is5" Class="mb-1">@p.CustomerName</Heading>
+                                                <Paragraph Class="mb-1">@p.ProjectName</Paragraph>
+                                                <Div Class="d-flex align-items-center gap-2">
+                                                    <span class="text-muted">@p.CreatedDate.ToString("MMMM d, yyyy")</span>
+                                                    <span class="@(GetStatusCss(p.StatusCodeId))">@GetStatusName(p.StatusCodeId)</span>
+                                                </Div>
+                                            </a>
+                                        </CardBody>
+                                    </Card>
+                                </Div>
+                            }
+                        </Row>
+                    }
+                }
+            }
+        </Div>
+    </LayoutContent>
+</Layout>
+
+@code {
+    private bool isLoading = true;
+    private bool loadError = false;
+    private string errorMessage = string.Empty;
+    private string companyGuid = string.Empty;
+
+    private List<WeekGroup> groupedWeeks = new();
+
+    // New: controls whether only accepted projects (StatusCodeId == 2) are shown
+    private bool showAcceptedOnly = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            if (user?.Identity?.IsAuthenticated != true)
+            {
+                loadError = true;
+                errorMessage = "You must be signed in to view projects.";
+                isLoading = false;
+                return;
+            }
+
+            var email = GetUserEmail(user);
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                loadError = true;
+                errorMessage = "Unable to determine user email.";
+                isLoading = false;
+                return;
+            }
+
+            companyGuid = await PricingService.GetUserCompanyGuidAsync(email);
+            if (string.IsNullOrWhiteSpace(companyGuid))
+            {
+                loadError = true;
+                errorMessage = "Unable to determine company for the current user.";
+                isLoading = false;
+                return;
+            }
+
+            await LoadProjectsAsync();
+        }
+        catch (Exception ex)
+        {
+            loadError = true;
+            errorMessage = $"Failed to initialize component: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadProjectsAsync()
+    {
+        isLoading = true;
+        loadError = false;
+        errorMessage = string.Empty;
+        try
+        {
+            List<ProjectDataMinimal> list;
+            if (showAcceptedOnly)
+            {
+                list = await PricingService.GetAcceptedProjectsAsync(companyGuid);
+            }
+            else
+            {
+                list = await PricingService.GetCompanyProjectsMinimalAsync(companyGuid);
+            }
+
+            // Group by week starting Monday
+            groupedWeeks = list
+                .GroupBy(p => GetWeekStart(p.CreatedDate))
+                .OrderByDescending(g => g.Key)
+                .Select(g => new WeekGroup
+                {
+                    Start = g.Key,
+                    End = g.Key.AddDays(6),
+                    Label = BuildWeekLabel(g.Key, g.Key.AddDays(6)),
+                    Projects = g.OrderByDescending(x => x.CreatedDate).ToList()
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            loadError = true;
+            errorMessage = $"Failed to load projects: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnShowAcceptedOnlyChanged(bool newValue)
+    {
+        showAcceptedOnly = newValue;
+        await LoadProjectsAsync();
+    }
+
+    private static string GetUserEmail(System.Security.Claims.ClaimsPrincipal user)
+    {
+        return user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? user.FindFirst("emails")?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? user.Identity?.Name
+            ?? string.Empty;
+    }
+
+    private static DateTime GetWeekStart(DateTime date)
+    {
+        var d = date.Date;
+        int diff = (7 + (int)d.DayOfWeek - (int)DayOfWeek.Monday) % 7;
+        return d.AddDays(-diff);
+    }
+
+    private static string BuildWeekLabel(DateTime start, DateTime end)
+    {
+        if (start.Year == end.Year && start.Month == end.Month)
+        {
+            // Example: April 1 - 7, 2024
+            return $"{start:MMMM d} - {end:dd}, {end:yyyy}";
+        }
+        if (start.Year == end.Year)
+        {
+            // Example: March 25 - April 7, 2024
+            return $"{start:MMMM d} - {end:MMMM d}, {end:yyyy}";
+        }
+        // Example: Dec 30, 2024 - Jan 5, 2025
+        return $"{start:MMMM d, yyyy} - {end:MMMM d, yyyy}";
+    }
+
+    private static string GetStatusName(int statusId) => statusId switch
+    {
+        1 => "New",
+        2 => "Accepted",
+        3 => "In-Progress",
+        4 => "On-Hold",
+        5 => "Declined",
+        6 => "Completed",
+        7 => "Closed",
+        8 => "Proposed",
+        _ => "Unknown"
+    };
+
+    private static string GetStatusCss(int statusId) => statusId switch
+    {
+        2 => "text-success fw-semibold",   // Accepted -> green
+        1 => "text-primary fw-semibold",   // New -> blue
+        6 => "text-success fw-semibold",   // Completed -> green
+        5 => "text-danger fw-semibold",    // Declined -> red
+        3 => "text-warning fw-semibold",   // In-Progress -> amber
+        4 => "text-secondary fw-semibold", // On-Hold -> gray
+        7 => "text-secondary fw-semibold", // Closed -> gray
+        8 => "text-info fw-semibold",      // Proposed -> info blue
+        _ => "text-muted"
+    };
+
+    private string GetProjectUrl(Guid projectGuid)
+        => $"pricing/projectentrymain/{projectGuid}"; // Relative so it respects app base path (e.g. /rbp/)
+
+    private void NavigateToProject(Guid guid)
+        => NavigationManager.NavigateTo(GetProjectUrl(guid), forceLoad: true);
+
+    private class WeekGroup
+    {
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+        public string Label { get; set; } = string.Empty;
+        public List<ProjectDataMinimal> Projects { get; set; } = new();
+    }
+}

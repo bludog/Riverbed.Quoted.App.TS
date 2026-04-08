@@ -1,0 +1,154 @@
+@page "/company-customer-edit/{customerId}"
+
+@inject ILogger<CompanyCustomerEdit> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@using Blazorise
+@rendermode InteractiveWebAssembly
+
+<h3>CompanyCustomerEdit</h3>
+
+@if (editContext != null)
+{
+    
+    <EditForm EditContext="@editContext" OnValidSubmit="@HandleValidSubmit" OnInvalidSubmit="@HandleInvalidSubmit" Context="editFormContext" @ref="editFormRef">
+        <DataAnnotationsValidator />
+        <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="First Name" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                <DxTextBox @bind-Text="companyCustomer.FirstName" ShowValidationIcon="true" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Last Name" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                <DxTextBox @bind-Text="companyCustomer.LastName" ShowValidationIcon="true" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Email" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                <DxTextBox @bind-Text="companyCustomer.Email" ShowValidationIcon="true" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="CC Email" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                <DxTextBox @bind-Text="companyCustomer.SecondaryCcEmail" ShowValidationIcon="true" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Mobile Phone" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                <DxTextBox @bind-Text="companyCustomer.MobilePhone" NullText="123-456-7890" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Alternate Phone" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                <DxTextBox @bind-Text="companyCustomer.SecondaryPhoneNumber" NullText="123-456-7890" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Address" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                <GoogleAddressAutocomplete OnAddressSelected="HandleAddressSelected" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12">
+                <DxCheckBox @bind-Checked="@showAddressDetails">
+                    Show Address
+                </DxCheckBox>
+            </DxFormLayoutItem>  
+
+            <DxFormLayoutGroup Caption="Address Details" Visible="@showAddressDetails">
+                <DxFormLayoutItem Caption="Address 1" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="companyCustomer.Address1" ShowValidationIcon="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Address 2" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="companyCustomer.Address2" ShowValidationIcon="true"  />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="City" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="companyCustomer.City" ShowValidationIcon="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="State" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                    <DxTextBox @bind-Text="companyCustomer.StateCode" ShowValidationIcon="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Zip" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="companyCustomer.ZipCode" ShowValidationIcon="true"  />
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+            <DxFormLayoutItem>
+                <DxButton SubmitFormOnClick="true" Text="Submit" />
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Click="@HandleCancel" Text="Cancel" />
+            </DxFormLayoutItem>
+        </DxFormLayout>    
+    </EditForm>
+}
+
+@code {
+    [Parameter] public string customerId { get; set; }
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    public IPricingService pricingService { get; set; }
+
+    private bool showAddressDetails = false;
+    private EditContext editContext;
+    private EditForm editFormRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+
+        if (customerId == "0")
+        {
+            companyCustomer = new CompanyCustomer();
+        }
+        else
+        {
+            companyCustomer = await pricingService.GetCompanyCustomerAsync(customerId);
+        }
+
+        // Initialize the EditContext with the companyCustomer object
+        editContext = new EditContext(companyCustomer);        
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Reinitialize the EditContext to ensure it is set up correctly after the first render
+            editContext = new EditContext(companyCustomer);
+        }
+    }
+
+    private AddressDetailsDto selectedAddress;
+
+    private void HandleAddressSelected(AddressDetailsDto address)
+    {
+        selectedAddress = address;
+        companyCustomer.Address1 = address.Street;
+        companyCustomer.City = address.City;
+        companyCustomer.StateCode = address.State;
+        companyCustomer.ZipCode = address.PostalCode;
+        editContext?.Validate();
+    }
+
+    private void ToggleAddressCollapse()
+    {
+        showAddressDetails = !showAddressDetails;
+    }
+
+    public async Task HandleValidSubmit()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userName = user.Identity.Name;
+        if (companyCustomer.Id == 0)
+        {
+            var companyGuid = await pricingService.GetUserCompanyGuidAsync(userName);
+            companyCustomer.CompanyId = Guid.Parse(companyGuid);
+            companyCustomer.CreatedDate = DateTime.Now;
+            await pricingService.CreateCompanyCustomerAsync(companyCustomer);
+            NavigationManager.NavigateTo("company-customer-list");
+        }
+        else
+        {
+            await pricingService.UpdateCompanyCustomerAsync(companyCustomer);
+            NavigationManager.NavigateTo("company-customer-display/" + companyCustomer.CustomerId.ToString());
+        }
+    }
+
+    public void HandleInvalidSubmit()
+    {
+        showAddressDetails = true;
+    }
+
+    public void HandleCancel()
+    {
+        NavigationManager.NavigateTo("company-customer-list" );
+    }    
+}

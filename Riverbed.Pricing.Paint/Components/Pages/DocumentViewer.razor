@@ -1,0 +1,13 @@
+@page "/documentviewer"
+
+@using DevExpress.Blazor.Reporting
+@using DevExpress.XtraReports.UI
+
+<link href="_content/DevExpress.Blazor.Themes/blazing-berry.bs5.css" rel="stylesheet" />
+<link href="_content/DevExpress.Blazor.Reporting.Viewer/css/dx-blazor-reporting-components.bs5.css" rel="stylesheet" />
+
+<title>Document Viewer</title>
+
+<DxDocumentViewer ReportName="CustomerPricingQuoteVI" Height="calc(100vh - 130px)" Width="100%">
+    <DxDocumentViewerTabPanelSettings  Width="340" />
+</DxDocumentViewer>

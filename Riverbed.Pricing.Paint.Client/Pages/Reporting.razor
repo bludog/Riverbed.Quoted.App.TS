@@ -1,0 +1,33 @@
+@page "/reporting"
+@using Blazorise
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+<PageTitle>Reporting</PageTitle>
+
+<h3>Reporting</h3>
+
+<div class="reporting-container">
+    <Tabs SelectedTab="@selectedTab" SelectedTabChanged="@OnSelectedTabChanged">
+        <Items>
+            <Tab Name="companyprojects">Company Projects</Tab>
+            @* Add more <Tab> items here for additional reports *@
+        </Items>
+        <Content>
+            <TabPanel Name="companyprojects">
+                <CompanyProjectsGrid />
+            </TabPanel>
+            @* Add more <TabPanel> items here for additional reports *@
+        </Content>
+    </Tabs>
+</div>
+
+@code {
+    string selectedTab = "companyprojects";
+
+    private Task OnSelectedTabChanged(string name)
+    {
+        selectedTab = name;
+        return Task.CompletedTask;
+    }
+}

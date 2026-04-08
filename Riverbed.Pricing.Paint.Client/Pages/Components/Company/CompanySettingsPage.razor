@@ -1,0 +1,96 @@
+﻿@page "/companysettings"
+
+@inject ILogger<CompanySettingsPage> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@attribute [Authorize]
+
+
+<h3>CompanySettings</h3>
+<CardDeck>
+    <Card>
+        <CardBody>
+            @{if (companyGuid != null)
+            {
+                    <CompaniesComponent isCompanyAdmin="@isCompanyAdmin" companyGuid="@companyGuid" />
+            }}            
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>
+    <Card>
+        <CardBody>
+            @{ if (companyGuid != null)
+                {
+                    <CompanySettingsComponent CompanyGuid = "@companyGuid"/>
+                }}
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>
+    <Card>
+        <CardBody>
+            @{
+                if (companyGuid != null)
+                {
+                    <PricingInteriorDefaultsComponent CompanyGuid="@companyGuid" />
+                }
+            }
+        </CardBody>
+    </Card>
+</CardDeck>
+<!-- CompanyPaintableItemsComponent -->
+<CardDeck>
+    <Card>
+        <CardBody>
+            <CompanyPaintableItemComponent CompanyGuid="@companyGuid" />
+        </CardBody>
+    </Card>
+</CardDeck>
+<Card>
+    <CardBody>
+        @{ if (companyGuid != null)
+            {
+                <CompanyDefaultsComponent CompanyGuid="@companyGuid" />
+            }}
+    </CardBody>
+</Card>
+<CardDeck>
+    <Card>
+        <CardBody>
+            <CompanyPaintTypeComponent CompanyGuid="@companyGuid" />
+        </CardBody>
+    </Card>
+</CardDeck>
+<Card>
+    <CardBody>
+        <CompanyHTMLReportsComponent CompanyGuid="@companyGuid" />
+    </CardBody>
+</Card>
+<Card>
+    <CardBody>
+        @{ if (companyGuid != null)
+            {
+                <ServiceTitanConnectionDataEditForm CompanyGuid="@companyGuid" />
+            }}
+    </CardBody>
+</Card>
+
+@code {
+    public bool isCompanyAdmin { get; set; } = true;
+    public string companyGuid { get; set; } = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        //isCompanyAdmin = user.IsInRole("CompanyAdmin");
+        isCompanyAdmin = true;
+        if (isCompanyAdmin)
+        {
+            var guid = await IPricingService.GetUserCompanyGuidAsync(user.Identity.Name);
+            companyGuid = guid;
+        }
+    }
+}

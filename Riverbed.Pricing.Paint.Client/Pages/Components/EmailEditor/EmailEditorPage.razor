@@ -1,0 +1,51 @@
+@page "/emaileditor"
+@using Riverbed.Pricing.Paint.Shared.Entities.Emails
+@using DevExpress.Blazor
+@using DevExpress.Blazor.RichEdit
+
+@inject IEmailEditorTemplateManger EmailEditorTemplateManger
+@inject ILogger<EmailEditorPage> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator @ref="loadingIndicator">
+    <DxRichEdit DocumentContent="@markup" Height="500px">
+        
+    </DxRichEdit>
+</LoadingIndicator>
+
+@code {
+    [Parameter] public int emailTemplateId { get; set; }
+    [Parameter] public string companyGuid { get; set; }
+    public byte[] markup;
+    public bool isCompanyAdmin { get; set; } = true;
+    public List<EmailTemplate> templateList { get; set; }
+    public LoadingIndicator loadingIndicator { get; set; }
+
+    protected override async void OnInitialized()
+    {
+        
+    }
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        base.SetParametersAsync(parameters);
+        await loadingIndicator.Show();
+
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        //isCompanyAdmin = user.IsInRole("CompanyAdmin");
+        if (isCompanyAdmin)
+        {
+            var guid = await IPricingService.GetUserCompanyGuidAsync(user.Identity.Name);
+            companyGuid = guid;
+        }
+
+        var emailTeplateId = 1;
+        var emailTemplate = EmailEditorTemplateManger.GetEmailTemplateById(EmailEditor.EmailEditorTemplateManger.EmailType.CustomerLinkToQuote);
+
+        StateHasChanged();
+        await loadingIndicator.Hide();
+    }
+}

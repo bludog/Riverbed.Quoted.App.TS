@@ -1,0 +1,173 @@
+@using BlazorWheelPickerLib
+
+@rendermode InteractiveWebAssembly
+
+<style>
+    .centered-row {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 10px; /* Optional: Add some space between rows */
+    }
+
+    .centered-cell {
+        margin: 0 10px; /* Optional: Add some space between cells */
+    }
+
+    .fixed-font-size {
+        font-size: 16px; /* Set your desired font size here */
+    }
+
+    .second-row {
+        max-height: 140px; /* Set the maximum height for the second row */
+    }
+
+    .fixed-size {
+        width: 80px !important;
+        height: 140px !important;
+    }
+</style>
+
+<div style="width:300px; height:300px;">
+    <div class="centered-row">
+        <div class="centered-cell" style="width:80px;"><b>Length</b></div>
+        <div class="centered-cell" style="width:80px;"><b>Width</b></div>
+        <div class="centered-cell" style="width:80px;"><b>Height</b></div>
+    </div>
+    <div class="centered-row second-row">
+        <div class="centered-cell">
+            <WheelSelect @bind-Value="Length" Style="width:80px;" Dense="true" T="int" Items="ItemsInt">
+                <ItemTemplate Context="test">
+                    <div style="display:flex;flex-direction:row;align-items:center;justify-content:center" class="fixed-font-size fixed-size">
+                        @test
+                    </div>
+                </ItemTemplate>
+            </WheelSelect>
+        </div>
+        <div class="centered-cell">
+            <WheelSelect @bind-Value="Width" Style="width:80px;" Dense="true" T="int" Items="ItemsInt">
+                <ItemTemplate Context="test">
+                    <div style="display:flex;flex-direction:row;align-items:center;justify-content:center" class="fixed-font-size fixed-size">
+                        @test
+                    </div>
+                </ItemTemplate>
+            </WheelSelect>
+        </div>
+        <div class="centered-cell">
+            <WheelSelect @bind-Value="Height" Style="width:80px;" Dense="true" T="int" Items="ItemsInt">
+                <ItemTemplate Context="test">
+                    <div style="display:flex;flex-direction:row;align-items:center;justify-content:center" class="fixed-font-size fixed-size">
+                        @test
+                    </div>
+                </ItemTemplate>
+            </WheelSelect>
+        </div>
+    </div>
+    <div class="centered-row">
+        <p>LxWxH: @Length x @Width x @Height</p>
+    </div>
+</div>
+
+@* <Div Class="centered-row">
+<div class="centered-content">
+    <WheelSelect @bind-Value="_selectedCity" Style="width:100%;" Dense="true" T="string" Items="Items">
+        <ItemTemplate Context="city">
+            <div style="display:flex;flex-direction:row;align-items:center;justify-content:center" class="fixed-font-size">
+                @city
+            </div>
+        </ItemTemplate>
+    </WheelSelect>
+</div>
+</Div> *@
+
+
+@code {
+    public List<string> Items = new List<string>() { "Paris", "Rome", "London", "Berlin", "Madrid" };
+    private string _selectedCity;
+
+    private int _length;
+    private int _width;
+    private int _height;
+
+    [Parameter]
+    public int Length
+    {
+        get => _length;
+        set
+        {
+            if (_length != value)
+            {
+                _length = value;
+                LengthChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    [Parameter]
+    public EventCallback<int> LengthChanged { get; set; }
+
+    [Parameter]
+    public int Width
+    {
+        get => _width;
+        set
+        {
+            if (_width != value)
+            {
+                _width = value;
+                WidthChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    [Parameter]
+    public EventCallback<int> WidthChanged { get; set; }
+
+    [Parameter]
+    public int Height
+    {
+        get => _height;
+        set
+        {
+            if (_height != value)
+            {
+                _height = value;
+                HeightChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    [Parameter]
+    public EventCallback<int> HeightChanged { get; set; }
+
+    [Parameter]
+    public int StartIndex { get; set; } = 0;
+
+    [Parameter]
+    public int EndIndex { get; set; } = 200;
+
+    public List<int> ItemsInt { get; set; } = new List<int>();
+
+    public bool ShowWheelTestPopUp { get; set; } = false;
+
+    protected override void OnInitialized()
+    {
+        for (int i = StartIndex; i < EndIndex; i++)
+            ItemsInt.Add(i);
+
+        _selectedCity = Items[2];
+        StateHasChanged();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var city = _selectedCity;
+            // Perform any actions needed after the initial render
+            StateHasChanged();
+        }
+
+    }
+}
+

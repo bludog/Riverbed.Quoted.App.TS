@@ -1,0 +1,9 @@
+@page "/reportdesigner"
+
+<DxReportDesigner ReportName="TestReport" Height="calc(100vh - 130px)" Width="100%" AllowMDI="true" DataSources="DataSources">
+    <DxReportDesignerWizardSettings UseFullscreenWizard="true" />
+</DxReportDesigner>
+
+@code {
+    Dictionary<string, object> DataSources = new Dictionary<string, object>();
+}

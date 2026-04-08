@@ -1,0 +1,1814 @@
+﻿@page "/pricing/projectentrymain/{CustomerId}/{ProjectId}"
+@page "/pricing/projectentrymain/{ProjectId}"
+
+@using System.IO
+@using System.Runtime.InteropServices.ComTypes
+@using System.Reflection.Metadata
+@using System.Net
+@using System.Net.Http.Headers
+@using Microsoft.AspNetCore.Http
+@using static System.Net.WebRequestMethods
+@using Riverbed.Pricing.Paint.Reports.Utils
+@using static Riverbed.Pricing.Paint.Client.Pages.Components.EmailEditor.EmailEditorTemplateManger
+@using DevExpress.Blazor
+@using Riverbed.Pricing.Paint.Shared.Data
+@using System.Text.Json
+
+@inject FileSaveHelper FileSaveHelper
+@inject ILogger<ProjectEntryMain> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject IJSRuntime JSRuntime
+@layout NoMenuLayout
+@rendermode InteractiveWebAssembly
+
+<style>
+    .rb-status-pill .dxbs-editor-input {
+        border-radius: 999px;
+        padding: 2px 12px;
+        font-weight: 600;
+    }
+
+    .rb-status-pill {
+        min-width: 170px;
+    }
+
+</style>
+
+<LoadingIndicator @ref="loadingIndicator" Loaded="StartLoadingIndicator">
+    <AuthorizeView>
+        <Authorized>
+            <Button Color="Color.Link" Clicked="() => NavigationManager.NavigateTo(customerProjectsURL)">
+                <Icon Name="IconName.ChevronLeft" IconSize="IconSize.Large" /> Back to @companyCustomer.FirstName @companyCustomer.LastName
+            </Button>
+            @{
+                authorized = true;
+            }
+        </Authorized>   
+         <NotAuthorized>  
+             <Row Class="w-100 my-2">
+                <Column TextAlignment="TextAlignment.End">
+                  <Button Color="Color.Link"
+                                Clicked="() => NavigationManager.NavigateTo(loginURL)">
+                    Log in
+                  </Button>
+              </Column>
+            </Row>
+        </NotAuthorized>
+    </AuthorizeView>
+
+    <Layout>
+        <LayoutContent>
+            <Card>
+                <CardBody Background="Background.Light" Style="border-color:none">
+                    <AuthorizeView>
+                        <Authorized>
+                            <Dropdown Flex="Flex.JustifyContent.End.AlignItems.End">
+                                <DropdownToggle><Icon Name="IconName.Bars" IconSize="IconSize.Large" /></DropdownToggle>
+                                <DropdownMenu>                            
+                                    <Dropdown>
+                                        <DropdownToggle>Quote</DropdownToggle>
+                                        <DropdownMenu>
+                                            <DropdownItem Clicked="@(() => ShowEmailPopup())" Disabled="@(rooms.Count <= 0)"><Icon Name="IconName.Mail" IconSize="IconSize.Default" /> Email Quote</DropdownItem>
+                                            <DropdownItem Clicked="@(() => GetQuotePdf())" Disabled="@(rooms.Count <= 0)"><Icon Name="IconName.Download" IconSize="IconSize.Default" /> Download Quote</DropdownItem>
+                                            <DropdownItem Clicked="@(() => ViewProjectQuote())" Disabled="false"><Icon Name="IconName.FilePdf" IconSize="IconSize.Default" /> View Quote</DropdownItem>
+                                        </DropdownMenu>
+                                    </Dropdown>
+                                    <Dropdown>
+                                        <DropdownToggle>Work Order</DropdownToggle>
+                                        <DropdownMenu>
+                                            <DropdownItem Clicked="@(() => ViewProjectWorkOrder())" Disabled="false"><Icon Name="IconName.FilePdf" IconSize="IconSize.Default" /> View Work Order</DropdownItem>
+                                            <DropdownItem Clicked="@ShowWorkOrderPopup" Disabled="false"><Icon Name="IconName.Link" IconSize="IconSize.Default" /> Work Order Link</DropdownItem>
+                                        </DropdownMenu>
+                                    </Dropdown>                                                    
+                                    <DropdownItem Clicked="@(() => DiscountPopupVisible = true)" Disabled="@HideQuoteEdits"><Icon Name="IconName.ChartPie" IconSize="IconSize.Default" /> Discount</DropdownItem>
+                                    <DropdownItem Clicked="@(() => GlobalChangesPopupVisible = true)" Disabled="@(rooms.Count <= 0 || selectedProject.StatusCodeId == 2)"><Icon Name="IconName.Edit" IconSize="IconSize.Default" /> Global Room Settings</DropdownItem>
+                                    <DropdownItem Clicked="@(() => ProjectActionsVisible = true)">
+                                        <Icon Name="IconName.Settings" IconSize="IconSize.Default" /> Project Send/Status/Edit
+                                    </DropdownItem>
+                                    <DropdownDivider />
+                                    <DropdownItem Clicked="@(() => EditProjectModalVisible = true)" Disabled="@HideQuoteEdits"><Icon Name="IconName.Pen" IconSize="IconSize.Default" /> Edit Project</DropdownItem>
+                                    <DropdownItem Clicked="@(() => DeletePopupVisible = true)" Disabled="@(!authorized || HideQuoteEdits)"><Icon Name="IconName.Delete" IconSize="IconSize.Default" /> Delete Project</DropdownItem>
+                                </DropdownMenu>
+                            </Dropdown>
+                    </Authorized>
+                    </AuthorizeView>
+                    <Div Class="d-flex justify-content-center align-items-center gap-2">
+                        <Div Class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
+                            <Div Class="d-flex justify-content-center align-items-center gap-2 flex-wrap">
+                                <Heading Size="HeadingSize.Is3" Class="mb-0">@selectedProject.ProjectName</Heading>
+
+                                <Dropdown>
+                                    <DropdownToggle>
+                                        <Badge Color="Color.Primary" Pill="true" Class="px-3 py-2">
+                                            @statusText
+                                        </Badge>
+                                    </DropdownToggle>
+
+                                    <DropdownMenu>
+                                        @if (statusCodes is not null)
+                                        {
+                                            @foreach (var s in statusCodes)
+                                            {
+                                                <DropdownItem Disabled="@isSavingInlineStatus"
+                                                              Clicked="@(() => SetStatusAsync(s.Id))">
+                                                    @s.StatusCodeName
+                                                </DropdownItem>
+                                            }
+                                        }
+                                    </DropdownMenu>
+                                </Dropdown>
+
+                                @if (isSavingInlineStatus)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                }
+                            </Div>
+                      
+
+                        @if (isSavingInlineStatus)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        }
+                    </Div>
+                      
+                    </Div>
+
+                    <Div TextAlignment="TextAlignment.Center">
+                        <Heading Size="HeadingSize.Is6" TextColor="TextColor.Muted">@selectedProject.Address1, @selectedProject.City, @selectedProject.StateCode @selectedProject.ZipCode</Heading>
+                        <Div Class="d-flex flex-column gap-1 align-items-center">
+                            @if (!string.IsNullOrWhiteSpace(selectedProject.CustomerEmail) || !string.IsNullOrWhiteSpace(selectedProject.SecondaryCcEmail))
+                            {
+                                <Div Class="d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                                    @if (!string.IsNullOrWhiteSpace(selectedProject.CustomerEmail))
+                                    {
+                                        <Span class="text-muted">Email:</Span>
+                                        <Span class="fw-semibold">@selectedProject.CustomerEmail</Span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(selectedProject.SecondaryCcEmail))
+                                    {
+                                        <Span class="text-muted">CC:</Span>
+                                        <Span class="fw-semibold">@selectedProject.SecondaryCcEmail</Span>
+                                    }
+                                </Div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(selectedProject.CustomerPhone) || !string.IsNullOrWhiteSpace(selectedProject.SecondaryPhoneNumber))
+                            {
+                                <Div Class="d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                                    @if (!string.IsNullOrWhiteSpace(selectedProject.CustomerPhone))
+                                    {
+                                        <Icon Name="IconName.Phone" IconSize="IconSize.Small" />
+                                        <Span class="fw-semibold">@selectedProject.CustomerPhone</Span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(selectedProject.SecondaryPhoneNumber))
+                                    {
+                                        <Span class="text-muted">Alt:</Span>
+                                        <Span class="fw-semibold">@selectedProject.SecondaryPhoneNumber</Span>
+                                    }
+                                </Div>
+                            }
+                        </Div>
+                        <Heading Size="HeadingSize.Is6">@((MarkupString)selectedProject.Summary)</Heading>
+                        <Heading Size="HeadingSize.Is6">@rooms.Count - Rooms</Heading>
+                        <AuthorizeView Context="NewContext">
+                            <Authorized>
+                                <DxButton RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => ProjectActionsVisible = true)">
+                                     Project Send/Status/Edit
+                                </DxButton>
+
+                            </Authorized>
+						</AuthorizeView>        
+                       
+                    </Div>
+                </CardBody>
+            </Card>
+            <br />
+
+            <DxPopup @bind-Visible="@EditProjectModalVisible" 
+                     HeaderText="Edit Project" 
+                     ShowFooter="false" 
+                     Width="800px" 
+                     MaxWidth="95vw" 
+                     MinHeight="400px"
+                     MaxHeight="95vh"
+                     CloseOnOutsideClick="false"
+                     Scrollable="true"
+                     SizeMode="SizeMode.Large">
+                <BodyContentTemplate Context="popupContext">
+                    <Div Style="max-height: calc(95vh - 100px); overflow-y: auto; padding: 1rem;">
+                        <EditForm EditContext="@editContext" OnValidSubmit="SaveProjectModal" OnInvalidSubmit="HandleInvalidProjectSubmit">
+                        <ChildContent Context="formContext">
+                            <DataAnnotationsValidator />
+                            <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+                            <DxFormLayout>
+                                <DxFormLayoutItem Caption="Project Name" ColSpanMd="12">
+                                    <DxTextBox @bind-Text="@selectedProject.ProjectName" ShowValidationIcon="true" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Email" ColSpanMd="12">
+                                    <DxTextBox NullText="Email Address" ShowValidationIcon="true" @bind-Text="@selectedProject.CustomerEmail" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Phone Number" ColSpanMd="12">
+                                    <DxTextBox NullText="123-456-7890" Mask="000-000-0000" @bind-Text="@selectedProject.CustomerPhone" ShowValidationIcon="true" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="CC Email" ColSpanMd="12">
+                                    <DxTextBox NullText="CC Email Address" ShowValidationIcon="true" @bind-Text="@selectedProject.SecondaryCcEmail" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Alternate Phone" ColSpanMd="12">
+                                    <DxTextBox NullText="123-456-7890" Mask="000-000-0000" @bind-Text="@selectedProject.SecondaryPhoneNumber" ShowValidationIcon="true" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Summary" ColSpanMd="12">
+                                    <DxMemo @bind-Text="@selectedProject.Summary" ShowValidationIcon="true" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Address" ColSpanMd="12">
+                                    <GoogleAddressAutocomplete OnAddressSelected="@HandleAddressSelected" SearchText="@GetFullAddress()"/>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Show Address" ColSpanMd="12">
+                                    <DxCheckBox @bind-Checked="@showAddressFields">
+                                        Show Address    
+                                    </DxCheckBox>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutGroup Caption="Address Details" Visible="@showAddressFields">
+                                    <DxFormLayoutItem Caption="Address Line 1" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                                        <DxTextBox NullText="Address Line 1" @bind-Text="@selectedProject.Address1" ShowValidationIcon="true" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Address Line 2" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                                        <DxTextBox NullText="Address Line 2" @bind-Text="@selectedProject.Address2" ShowValidationIcon="true" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="City" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                                        <DxTextBox NullText="City Name" @bind-Text="@selectedProject.City" ShowValidationIcon="true" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="State" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                                        <DxTextBox NullText="State Code" @bind-Text="@selectedProject.StateCode" ShowValidationIcon="true" />
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Zip" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                                        <DxTextBox NullText="Zip Code" Mask="00000" @bind-Text="@selectedProject.ZipCode" ShowValidationIcon="true" />
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+                                <DxFormLayoutItem Caption="Copy Another Project" ColSpanMd="12">
+                                    <DxCheckBox @bind-Checked="@copyAnotherProjectSelected">
+                                        Copy Another Project (@allCustomers.Count customers available)
+                                    </DxCheckBox>
+                                </DxFormLayoutItem>
+                                @if (copyAnotherProjectSelected)
+                                {
+                                    <DxFormLayoutGroup Caption="Copy Project" Visible="@copyAnotherProjectSelected">
+                                        <DxFormLayoutItem Caption="Select Customer:" ColSpanMd="12">
+                                            <DxComboBox Data="@allCustomers"
+                                                        TextFieldName="FirstName"
+                                                        ValueFieldName="Id"
+                                                        @bind-Value="@selectedCopyCustomerId"
+                                                        NullText="Select Customer">
+                                                <ItemTemplate Context="customer">
+                                                    @customer.FirstName @customer.LastName
+                                                </ItemTemplate>
+                                            </DxComboBox>
+                                        </DxFormLayoutItem>
+                                        @if (selectedCopyCustomerId != 0 && customerProjectsDict.ContainsKey(selectedCopyCustomerId))
+                                        {
+                                            <DxFormLayoutItem Caption="Select Project:" ColSpanMd="12">
+                                                <DxComboBox Data="@customerProjectsDict[selectedCopyCustomerId]"
+                                                            TextFieldName="ProjectName"
+                                                            ValueFieldName="ProjectGuid"
+                                                            @bind-Value="@selectedCopyProjectGuid"
+                                                            NullText="Select Project">
+                                                    <ItemTemplate Context="project">
+                                                        @project.ProjectName
+                                                    </ItemTemplate>
+                                                </DxComboBox>
+                                            </DxFormLayoutItem>
+                                        }
+                                    </DxFormLayoutGroup>
+                                }
+                                <DxFormLayoutItem>
+                                    <DxButton SubmitFormOnClick="true" Text="Submit" />
+                                    <DxButton RenderStyle="ButtonRenderStyle.Secondary" Click="@HideProjectModal" Text="Cancel" />
+                                </DxFormLayoutItem>
+                            </DxFormLayout>
+                        </ChildContent>
+                    </EditForm>
+                    </Div>
+                </BodyContentTemplate>
+            </DxPopup>
+
+            <CardDeck>
+                <Card Shadow="Shadow.Default" Border="Border.Rounded">
+                    <ListGroup Flush Mode="ListGroupMode.Selectable" @bind-SelectedItem="@selectedItem" >
+                        <ListGroupItem Name="rooms" Flex="Flex.JustifyContent.End.AlignItems.End">
+                            <Button Color="Color.Link" Clicked="HandleNewHouseArea" hidden="@HideQuoteEdits">Add House</Button>
+                            <Button Color="Color.Link" Clicked="HandleNewArea" hidden="@HideQuoteEdits">Add Room</Button>
+                            <Button Color="Color.Link" Clicked="HandleNewExteriorArea" hidden="@HideQuoteEdits">Add Exterior</Button>
+                        </ListGroupItem>
+                        <Repeater Items="@rooms" Context="room">
+                            <ListGroupItem Name="@room.Id.ToString()">
+                                <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                                    <Div Class="d-flex align-items-center gap-2">
+                                        @if (room.RoomImageId.HasValue)
+                                        {
+                                            <img src="@GetRoomThumbnailUrl(room.RoomImageId.Value)" 
+                                                 alt="@room.Name" 
+                                                 class="room-thumbnail" 
+                                                 style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #dee2e6;" />
+                                        }
+                                        <Div>
+                                            <Heading Size="HeadingSize.Is5" Margin="Margin.Is1.FromBottom">
+                                                <Badge Color="Color.Success" Pill>@GetRoomNum()</Badge> @room.Name
+                                                @{
+                                                    if (room.IsOptional)
+                                                    {
+                                                        <text> (Optional)</text>
+                                                    }
+                                                }
+                                            </Heading>
+                                        </Div>
+                                    </Div>
+                                    <Text TextWeight="TextWeight.Bold">@room.TotalCost().ToString("C")</Text>
+                                </Div>
+
+                                <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                                    <Paragraph Margin="Margin.Is1.FromBottom">
+                                        @{
+                                            if (room.IncludeWalls || room.IncludeDoors || room.IncludeCeilings || room.IncludeBaseboards || room.IncludeWindows)
+                                            {
+                                                <Div><Blazorise.Text TextSize="TextSize.Small">@GetRoomMeasurements(room)</Blazorise.Text></Div>
+                                            }                                            
+                                        }
+                                        <Div><Text TextSize="TextSize.Small">@GetRoomOptions(room)</Text></Div>
+                                        <Div>
+                                            @foreach(var item in room.PaintableItems)
+                                            {
+                                                <Blazorise.Text TextSize="TextSize.Small" TextWeight="TextWeight.SemiBold" Display="Display.Block">
+                                                    @item.Count - @item.Name
+                                                </Blazorise.Text>
+                                            }
+                                        </Div> 
+                                       <Div>
+                                            @if (room.Notes != null)
+                                            {
+                                                    notesVisible = Visibility.Visible;
+                                            }
+                                                <Text TextSize="TextSize.Small" TextWeight="TextWeight.SemiBold" Visibility="@notesVisible">@room.Notes</Text>
+                                        </Div>
+                                    </Paragraph>
+                                    <Button Color="Color.Link" Clicked="@(() => {selectedRoom = room; OnItemClicked();})" hidden="@HideQuoteEdits">
+                                        <Icon Name="IconName.ChevronRight" IconSize="IconSize.Large" />
+                                    </Button> 
+                                </Div>
+
+                                <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                                    <Div Class="d-flex gap-2">
+                                        <Button Size="Size.Small" Color="Color.Link"
+                                        Clicked="@(() => {selectedRoom = room; ShowImageUploadPopup = true;})" hidden="@HideQuoteEdits">
+                                            <Icon Name="IconName.Image" /> Image
+                                        </Button>
+                                        <Button Size="Size.Small" Color="Color.Link"
+                                        Clicked="@(() => {selectedRoom = room; DeleteRoomPopupVisible = true;})" hidden="@HideQuoteEdits">
+                                            Delete
+                                        </Button>
+                                    </Div>
+                                </Div>
+                            </ListGroupItem>
+                        </Repeater>
+                        <ListGroupItem Name="total" Flex="Flex.JustifyContent.End.AlignItems.End">
+                            <Div>                                                                    
+                                <Div>
+                                    <Heading Size="HeadingSize.Is5">Project Total: @GetProjectTotal()</Heading>
+                                </Div>
+                                @if (GetDiscountAmountDecimal() > 0)
+                                {
+                                    <Div>
+                                        <Heading Size="HeadingSize.Is5">Discount (@GetProjectDiscount()): @GetDiscountAmount()</Heading>
+                                    </Div>                                
+                                    <Div>
+                                        <Heading Size="HeadingSize.Is5">Adjusted Price: @selectedProject.BaseAmount.ToString("C")</Heading>
+                                    </Div>
+                                }
+                            </Div>
+                        </ListGroupItem>
+                    </ListGroup>
+                </Card>
+            </CardDeck>
+        </LayoutContent>
+    </Layout>
+</LoadingIndicator>
+
+<DxPopup @bind-Visible="@ReportPopupVisible"
+ShowFooter="true"
+HeaderText="Delete Project">
+    <BodyContentTemplate>
+         <ReportViewer CustomerProjectId="@ProjectId"></ReportViewer>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => ReportPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@DiscountPopupVisible"
+ShowFooter="true"
+HeaderText="Project Discount">
+    <BodyContentTemplate>
+        <Fields>
+            <Field>
+                <FieldLabel for="Discount Amount" RequiredIndicator>Discount (%)</FieldLabel>
+                <NumericEdit id="Discount" @bind-Value="@discountAdjustment.Value" Placeholder="Discount %" />
+            </Field>            
+        </Fields>
+
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="OK" Click="@(() => SaveDiscountModal())" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => DiscountPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@DeletePopupVisible"
+ShowFooter="true"
+HeaderText="Delete Project">
+    <BodyContentTemplate>
+        Are you sure you want to delete this project?
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="OK" Click="@(async () => { await DeleteProjectModal(); })" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => DeletePopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@DeleteRoomPopupVisible"
+ShowFooter="true"
+HeaderText="Delete Room">
+    <BodyContentTemplate>
+        Are you sure you want to delete this Room?
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="OK" Click="@(() => DeleteRoomModal())" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => DeleteRoomPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@ShowImageUploadPopup"
+ShowFooter="true"
+HeaderText="@($"Room Image - {selectedRoom?.Name}")"
+Width="500px">
+    <BodyContentTemplate>
+        @if (selectedRoom != null)
+        {
+            <RoomImageUpload RoomId="@selectedRoom.Id" OnImageChanged="@HandleImageChanged" />
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Close" Click="@(() => ShowImageUploadPopup = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@QuotePopupVisible"
+ShowFooter="true"
+HeaderText="Project Quote"
+Width="1000px"
+MaxWidth="95vw"
+MaxHeight="90vh"
+SizeMode="SizeMode.Large">
+    <BodyContentTemplate>
+        <iframe src="@quoteViewerUrl" style="width:100%; height:80vh; border:none;"></iframe>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="Download" Click="@(() => DownloadProjectQuote())" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Close" Click="@(() => QuotePopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@WorkOrderPopupVisible"
+    ShowFooter="true"
+    HeaderText="Work Order Link">
+    <BodyContentTemplate>
+        <Fields>
+            <Field>
+                <FieldLabel for="WorkOrderLink">Link</FieldLabel>
+                <DxTextBox id="WorkOrderLink" Text="@workOrderUrl" ReadOnly="true" />
+            </Field>
+        </Fields>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="Copy Link" Click="@CopyWorkOrderLink" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Close" Click="@(() => WorkOrderPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="@GlobalChangesPopupVisible"
+    ShowFooter="true"
+    HeaderText="Global Room Settings"
+    Width="700px" MaxWidth="95vw">
+    <BodyContentTemplate>
+        <Div Class="d-flex flex-column gap-3">
+            <Div>
+                <label class="form-label">Walls</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeWallsSelection" />
+            </Div>
+            <Div>
+                <label class="form-label">Ceilings</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeCeilingsSelection" />
+            </Div>
+            <Div>
+                <label class="form-label">Doors</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeDoorsSelection" />
+            </Div>
+            <Div>
+                <label class="form-label">Windows</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeWindowsSelection" />
+            </Div>
+            <Div>
+                <label class="form-label">Baseboards</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeBaseboardsSelection" />
+            </Div>
+            <Div>
+                <label class="form-label">Crown Molding</label>
+                <DxComboBox TData="string" TValue="string" Data="@triStateOptions" @bind-Value="includeCrownMoldingSelection" />
+            </Div>
+            <Div>
+                <DxCheckBox @bind-Checked="changePaintQuality">Change Paint Quality for all rooms</DxCheckBox>
+            </Div>
+            @if (changePaintQuality)
+            {
+                <Div>
+                    <label class="form-label">Paint Quality</label>
+                    <DxComboBox TData="PaintQuality" TValue="int" Data="@paintQualities" TextFieldName="PaintQualityName" ValueFieldName="Id" @bind-Value="selectedPaintQualityId" NullText="Select Paint Quality" />
+                </Div>
+            }
+            <Div Class="text-muted" Style="font-size: 0.9rem;">
+                Note: Only selections set to Include or Exclude will be applied. Unchanged leaves existing room settings.
+            </Div>
+        </Div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="Apply" Click="@ApplyGlobalRoomSettingsAsync" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => GlobalChangesPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="ProjectActionsVisible"
+         HeaderText="Project Actions"
+         ShowFooter="false"
+         Width="90vw"
+         MaxWidth="90vw"
+         Height="90vh"
+         MaxHeight="90vh"
+         Scrollable="true">
+    <BodyContentTemplate>
+        <ProjectOptionsPanel ProjectGuid="@selectedProject.ProjectGuid"
+                             StatusChanged="OnStatusChangedFromPanel"
+                             ProjectChanged="OnProjectChangedFromPanel" />
+    </BodyContentTemplate>
+</DxPopup>
+
+
+<Snackbar @ref="snackbarPrimary" Color="SnackbarColor.Primary" Location="SnackbarLocation.Bottom">
+    <SnackbarBody>@snackbarPrimaryMessage</SnackbarBody>
+</Snackbar>
+
+
+@code {
+
+    [Parameter]
+    public string CustomerId { get; set; }
+    [Parameter]
+    public string ProjectId { get; set; }
+
+    private bool ProjectActionsVisible { get; set; }
+
+    [Parameter] public EventCallback<ProjectData> ProjectChanged { get; set; }
+    [Parameter] public EventCallback<int> StatusChanged { get; set; }
+
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    private Company company { get; set; }
+    public Room selectedRoom { get; set; } = new Room();
+    public ProjectData selectedProject { get; set; } = new ProjectData();
+    public Adjustment discountAdjustment { get; set; }
+    public List<StatusCode> statusCodes { get; set; }
+    public List<PaintQuality> paintQualities { get; set; }
+    public IPricingService pricingService { get; set; }
+    public string selectedItem = "";
+    private Blazorise.Modal editJobModal = new Blazorise.Modal();
+    private Blazorise.Modal deleteJobModal = new Blazorise.Modal();
+    private Blazorise.Modal deleteRoomModal = new Blazorise.Modal();
+    public List<Room> rooms { get; set; } = new List<Room>();
+    private Grid roomGrid;
+    private string customerProjectsURL = "company-customer-display";
+    private int roomNumber { get; set; }
+    private LoadingIndicator loadingIndicator;
+    private float projectTotal = 0;
+    private decimal discountTotal = 0;
+    private bool firstRender;
+    private Snackbar snackbarPrimary;
+    private string snackbarPrimaryMessage { get; set; } = "Successfuly Sent.";
+    private bool ProjectPopupVisible { get; set; } = false;
+    private bool DeletePopupVisible { get; set; } = false;
+    private bool DeleteRoomPopupVisible { get; set; } = false;
+    private bool ReportPopupVisible { get; set; } = false;
+    private bool AcceptQuotePopupVisible { get; set; } = false;
+    private bool HideQuoteEdits { get; set; } = false;
+    private bool DiscountPopupVisible { get; set; } = false;
+    private bool QuotePopupVisible { get; set; } = false;
+    private bool EditProjectModalVisible { get; set; } = false;
+    private bool EmailPopupVisible { get; set; } = false;
+    private bool WorkOrderPopupVisible { get; set; } = false;
+    private bool GlobalChangesPopupVisible { get; set; } = false;
+    private bool ShowImageUploadPopup { get; set; } = false;
+    private string workOrderUrl { get; set; } = string.Empty;
+    private string emailPopupAddress { get; set; } = string.Empty;
+    private string statusText { get; set; }
+    public Validations validations { get; set; }
+    private MenuDisplayMode DisplayMode { get; set; } = MenuDisplayMode.Mobile;
+    private DevExpress.Blazor.Orientation Orientation { get; set; } = DevExpress.Blazor.Orientation.Vertical;
+    private bool authorized { get; set; } = false;
+    private string loginURL => $"{NavigationManager.BaseUri}Account/Login";
+    private bool showEditFields = false;
+    private EditContext editContext = default!;
+    private string quoteViewerUrl { get; set; } = string.Empty;
+    private Visibility notesVisible = Visibility.Invisible;
+    private string _adjustedPrice = "$0.00";
+
+    // For Global Changes tri-state selections
+    private readonly List<string> triStateOptions = new() { "Unchanged", "Include", "Exclude" };
+    private string includeWallsSelection = "Unchanged";
+    private string includeCeilingsSelection = "Unchanged";
+    private string includeDoorsSelection = "Unchanged";
+    private string includeWindowsSelection = "Unchanged";
+    private string includeBaseboardsSelection = "Unchanged";
+    private string includeCrownMoldingSelection = "Unchanged";
+    private bool changePaintQuality = false;
+    private int selectedPaintQualityId { get; set; } = 0;
+
+    // For DxMenu dropdown
+    public List<CompanyCustomer> allCustomers { get; set; } = new List<CompanyCustomer>();
+    public Dictionary<int, List<ProjectData>> customerProjectsDict { get; set; } = new();
+    public int selectedCopyCustomerId { get; set; }
+    public Guid selectedCopyProjectGuid { get; set; }
+    public bool isCopyingRooms { get; set; } = false;
+
+    // Add checkbox state
+    private bool copyAnotherProjectSelected = false;
+    private bool isLoadingCopyMenu = false;
+
+    private int inlineStatusId;
+    private bool isSavingInlineStatus;
+
+    private void ToggleEditFields(bool value)
+    {
+        showEditFields = value;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Reload data whenever route parameters change (when navigating back to this page)
+        //await LoadData();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        firstRender = true;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        authorized = authState.User.Identity.IsAuthenticated;  
+        // Bind the EditContext to the selectedProject
+        editContext = new EditContext(selectedProject);        
+    }
+
+    // Placeholder for LoadingIndicator Loaded event - no-op
+    private Task StartLoadingIndicator()
+    {
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {    
+        if (firstRender)
+        {
+            if (loadingIndicator != null)
+            {
+                await loadingIndicator.Show();
+            }
+
+            this.firstRender = false;
+            await LoadData();
+
+            // Log navigation to a project at Information level
+            try
+            {
+                Logger.LogInformation("Navigated to Project {ProjectId}", ProjectId);
+            }
+            catch { }
+
+            // Rebind the EditContext to the selectedProject after loading data
+            editContext = new EditContext(selectedProject);
+            
+            if (loadingIndicator != null)
+            {
+                await loadingIndicator.Hide();
+            }
+            
+            // Only fetch customers once when the copy project option should be shown
+            if (string.IsNullOrEmpty(ProjectId) || ProjectId == "0")
+            {
+                previousShowCopyProjectMenu = true;
+                copyAnotherProjectSelected = false;
+                EditProjectModalVisible = true;
+                
+                if (allCustomers.Count == 0 && companyCustomer?.CompanyId != null)
+                {
+                    isLoadingCopyMenu = true;
+                    StateHasChanged();
+                    allCustomers = await pricingService.GetAllCompanyCustomersByGuidAsync(companyCustomer.CompanyId.ToString());
+                    isLoadingCopyMenu = false;
+                    snackbarPrimaryMessage = $"Found {allCustomers.Count} customers.";
+                    await snackbarPrimary.Show();
+                }
+            }
+            
+            StateHasChanged();            
+            
+        }
+
+        // Only fetch customers when checkbox is checked AND customers haven't been loaded yet
+        if (previousShowCopyProjectMenu != copyAnotherProjectSelected && copyAnotherProjectSelected && allCustomers.Count == 0)
+        {
+            previousShowCopyProjectMenu = copyAnotherProjectSelected;
+            customerProjectsDict.Clear();
+            selectedCopyCustomerId = 0;
+            selectedCopyProjectGuid = Guid.Empty;
+            isLoadingCopyMenu = true;
+            StateHasChanged();
+            allCustomers = await pricingService.GetAllCompanyCustomersByGuidAsync(companyCustomer.CompanyId.ToString());
+            isLoadingCopyMenu = false;
+            snackbarPrimaryMessage = $"Found {allCustomers.Count} customers.";
+            await snackbarPrimary.Show();
+            StateHasChanged();
+        }
+        else if (previousShowCopyProjectMenu != copyAnotherProjectSelected)
+        {
+            previousShowCopyProjectMenu = copyAnotherProjectSelected;
+        }
+
+        // Only fetch projects when customer is selected
+        if (previousSelectedCopyCustomerId != selectedCopyCustomerId && selectedCopyCustomerId != 0)
+        {
+            previousSelectedCopyCustomerId = selectedCopyCustomerId;
+            customerProjectsDict.Remove(selectedCopyCustomerId); // Clear previous projects for this customer
+            var projects = await pricingService.GetAllCustomerProjectsAsync(selectedCopyCustomerId);
+            customerProjectsDict[selectedCopyCustomerId] = projects;
+            StateHasChanged();
+        }
+        else
+        {
+            previousSelectedCopyCustomerId = selectedCopyCustomerId;
+        }
+    }
+
+    private async Task InitInlineStatusAsync()
+    {
+        if (selectedProject is null) return;
+        inlineStatusId = selectedProject.StatusCodeId;
+    }
+
+    private async Task SetStatusAsync(int newStatusId, string source = "inline")
+    {
+        if (selectedProject is null) return;
+        if (newStatusId == selectedProject.StatusCodeId) return;
+
+        try
+        {
+            isSavingInlineStatus = true;
+
+            selectedProject.StatusCodeId = newStatusId;
+            await IPricingService.UpdateCustomerProjectAsync(selectedProject);
+
+            // update UI state immediately
+            inlineStatusId = newStatusId;
+            statusText = statusCodes?.FirstOrDefault(x => x.Id == newStatusId)?.StatusCodeName ?? "";
+
+            HideQuoteEdits = selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Status update failed ({Source})", source);
+
+            // revert dropdown
+            inlineStatusId = selectedProject.StatusCodeId;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isSavingInlineStatus = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+
+    public void OnItemClicked()
+    {
+        var roomId = selectedRoom.Id;
+        NavigationManager.NavigateTo("pricing/project-room-wizard/" + ProjectId + "/" + roomId);
+    }
+
+    public void HandleNewArea()
+    {
+        NavigationManager.NavigateTo("pricing/project-room-wizard/" + ProjectId + "/0");
+    }
+
+    public void HandleNewExteriorArea()
+    {
+        NavigationManager.NavigateTo("pricing/project-room-wizard/" + ProjectId + "/0/exterior");
+    }
+
+    public void HandleNewHouseArea()
+    {
+        NavigationManager.NavigateTo("pricing/project-house-wizard/" + ProjectId);
+    }
+
+    public void ViewProjectQuote()
+    {
+        // Generate the URL to the ProjectQuoteViewer
+        //quoteViewerUrl = $"projectquotereport/{ProjectId}";
+
+        // If the project status id is 2 then use the main quote report else use the quote report for the project
+        if (selectedProject.StatusCodeId == 2 || selectedProject.StatusCodeId > 0)
+        {
+            //     quoteViewerUrl = $"reports/project-quote-report-main/{ProjectId}";
+            // }
+            // else
+            // {
+            quoteViewerUrl = $"reports/projectquotereport/{ProjectId}";
+        }
+        // // Open in a new tab/window using JavaScript interop
+        // var uri = NavigationManager.ToAbsoluteUri(quoteViewerUrl).ToString();
+        // JSRuntime.InvokeVoidAsync("open", uri, "_blank");
+
+        NavigationManager.NavigateTo(quoteViewerUrl);
+    }
+
+    public void ViewProjectWorkOrder()
+    {
+        // Generate the URL to the ProjectWorkOrder
+        var workOrderUrl = $"reports/projectworkorder/{ProjectId}";
+        // Open in a new tab/window using JavaScript interop
+        var uri = NavigationManager.ToAbsoluteUri(workOrderUrl).ToString();
+        JSRuntime.InvokeVoidAsync("open", uri, "_blank");
+    }
+
+    private void ShowWorkOrderPopup()
+    {
+        workOrderUrl = NavigationManager.ToAbsoluteUri($"reports/projectworkorder/{ProjectId}").ToString();
+        WorkOrderPopupVisible = true;
+    }
+
+    private async Task CopyWorkOrderLink()
+    {
+        if (string.IsNullOrWhiteSpace(workOrderUrl))
+        {
+            workOrderUrl = NavigationManager.ToAbsoluteUri($"reports/projectworkorder/{ProjectId}").ToString();
+        }
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", workOrderUrl);
+        snackbarPrimaryMessage = "Work Order link copied to clipboard.";
+        await snackbarPrimary.Show();
+    }
+
+    public void ProjectWorkOrderLink()
+    {
+        // Generate the URL to the ProjectWorkOrder
+        var workOrderUrl = $"reports/projectworkorder/{ProjectId}";
+        // Copy to clipboard using JavaScript interop
+        JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", NavigationManager.ToAbsoluteUri(workOrderUrl).ToString());
+        snackbarPrimaryMessage = "Work Order link copied to clipboard.";
+        snackbarPrimary.Show();
+    }
+
+    private async Task DownloadProjectQuote()
+    {
+        // var pdfBytes = await pricingService.GetInteriorQuoteAsPDFAsync(ProjectId);
+        var pdfBytes = await pricingService.GetProjectQuoteAsPDFAsync(ProjectId);
+
+        // Save the PDF file using FileSaveHelper
+        if (pdfBytes == null || pdfBytes.Length == 0)
+        {
+            snackbarPrimaryMessage = "Failed to generate PDF. Please try again.";
+            await snackbarPrimary.Show();
+            return;
+        }
+        snackbarPrimaryMessage = "Downloading Project Quote...";
+        await snackbarPrimary.Show();
+
+        // Convert the pdfBytes to a file since it is already a file stream
+        var fileName = selectedProject.ProjectName + "Quote-" + ProjectId + ".pdf";
+        var mimeType = "application/pdf";
+
+        await FileSaveHelper.SaveFileAsync(fileName, pdfBytes, mimeType);
+    }
+
+
+    public async Task LoadData()
+    {
+        Logger.LogInformation("[LoadData] Start: ProjectId={ProjectId}, CustomerId={CustomerId}", ProjectId, CustomerId);
+
+        try
+        {
+            // For new projects (ProjectId == "0"), we need CustomerId to be provided
+            if (string.IsNullOrEmpty(CustomerId))
+            {
+                // Only try to get CustomerId from existing project if ProjectId is not "0"
+                if (ProjectId != "0")
+                {
+                    var project = await pricingService.GetCustomerProjectAsync(ProjectId);
+                    if (project == null)
+                    {
+                        Logger.LogWarning("[LoadData] No project found for ProjectId={ProjectId}", ProjectId);
+                        return;
+                    }
+                    CustomerId = project.CompanyCustomerGuidId.ToString();
+                    Logger.LogInformation("[LoadData] CustomerId set from project: {CustomerId}", CustomerId);
+                }
+                else
+                {
+                    // ProjectId is "0" but CustomerId is empty - cannot proceed
+                    Logger.LogWarning("[LoadData] Cannot create new project without CustomerId");
+                    return;
+                }
+            }
+
+            companyCustomer = await pricingService.GetCompanyCustomerAsync(CustomerId);
+            if (companyCustomer == null)
+            {
+                Logger.LogWarning("[LoadData] No company customer found for CustomerId={CustomerId}", CustomerId);
+                return;
+            }
+            Logger.LogInformation("[LoadData] Loaded companyCustomer: {companyCustomer}", JsonSerializer.Serialize(companyCustomer));
+
+            var custId = companyCustomer.Id;
+            customerProjectsURL = "company-customer-display/" + CustomerId;
+
+            if (ProjectId == "0")
+            {
+                discountAdjustment = new Adjustment(selectedProject.Id, AdjustmentType.Discount, 0);
+                selectedProject = new ProjectData()
+            {
+                CompanyCustomerId = custId,
+                ProjectGuid = Guid.NewGuid(),
+                Id = 0,
+                CreatedDate = DateTime.Now,
+                BaseAmount = 0,
+                CompletedDate = DateTime.Now.AddDays(30),
+                StatusCodeId = 1,
+                CustomerEmail = string.Empty,
+                CustomerPhone = string.Empty,
+                ProjectName = string.Empty,
+                Address1 = string.Empty,
+                Address2 = string.Empty,
+                City = string.Empty,
+                StateCode = string.Empty,
+                ZipCode = string.Empty,
+                Adjustments = new List<Adjustment> { new Adjustment(selectedProject.Id, AdjustmentType.Discount, 0) },
+                Summary = "Painting Project",
+                ScopeOfWork = "",
+                ServiceTitanId = 0
+            };
+
+                if (authorized && companyCustomer != null && selectedProject != null)
+                {
+                    selectedProject.Address1 = companyCustomer.Address1;
+                    selectedProject.Address2 = companyCustomer.Address2;
+                    selectedProject.City = companyCustomer.City;
+                    selectedProject.StateCode = companyCustomer.StateCode;
+                    selectedProject.ZipCode = companyCustomer.ZipCode;
+                    selectedProject.CustomerEmail = companyCustomer.Email;
+                    selectedProject.CustomerPhone = companyCustomer.MobilePhone ?? string.Empty;
+                    selectedProject.SecondaryCcEmail = companyCustomer.SecondaryCcEmail;
+                    selectedProject.SecondaryPhoneNumber = companyCustomer.SecondaryPhoneNumber;
+                }
+                Logger.LogInformation("[LoadData] Created new project: {selectedProject}", JsonSerializer.Serialize(selectedProject));
+            }
+            else
+            {
+                selectedProject = await pricingService.GetCustomerProjectAsync(ProjectId);
+                if (selectedProject == null)
+                {
+                    Logger.LogWarning("[LoadData] No project found for ProjectId={ProjectId}", ProjectId);
+                    return;
+                }
+                Logger.LogInformation("[LoadData] Loaded selectedProject: {selectedProject}", JsonSerializer.Serialize(selectedProject));
+
+                rooms = await pricingService.GetRoomsByProjectIdAsync(selectedProject.Id) ?? new List<Room>();
+                Logger.LogInformation("[LoadData] Loaded {RoomCount} rooms: {Rooms}", rooms.Count, JsonSerializer.Serialize(rooms));
+
+                // Recalculate projectTotal from actual room data to ensure BaseAmount stays in sync
+                projectTotal = 0;
+                foreach (var room in rooms)
+                {
+                    if (room != null && !room.IsOptional)
+                        projectTotal += room.TotalCost();
+                }
+
+                if (selectedProject.Adjustments.Count == 0)
+                {
+                    discountAdjustment = new Adjustment(selectedProject.Id, AdjustmentType.Discount, 0);
+                    selectedProject.Adjustments.Add(discountAdjustment);
+                }
+                else
+                {
+                    discountAdjustment = selectedProject.Adjustments.Find(x => x.Type == AdjustmentType.Discount);
+                }
+
+                // Always persist the fresh total (including discount) so CompanyCustomerDisplay is accurate
+                await GetProjectTotalWithDiscount();
+            }
+
+            statusCodes = await pricingService.GetAllStatusCodesAsync() ?? new List<StatusCode>();
+            paintQualities = await pricingService.GetAllPaintQualitiesAsync() ?? new List<PaintQuality>();
+            Logger.LogInformation("[LoadData] Loaded {StatusCodeCount} status codes, {PaintQualityCount} paint qualities", statusCodes.Count, paintQualities.Count);
+
+            if (companyCustomer != null)
+            {
+                company = await pricingService.GetCompanyAsync(companyCustomer.CompanyId);
+                Logger.LogInformation("[LoadData] Loaded company: {company}", JsonSerializer.Serialize(company));
+            }
+
+            HideQuoteEdits = selectedProject != null && selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+            if (selectedProject != null && statusCodes != null)
+            {
+                var st = statusCodes.Find(x => x.Id == selectedProject.StatusCodeId);
+                statusText = st != null ? st.StatusCodeName : string.Empty;
+                inlineStatusId = selectedProject.StatusCodeId;
+
+                await InitInlineStatusAsync();
+            }
+            else
+            {
+                statusText = string.Empty;
+            }
+
+            Logger.LogInformation("[LoadData] End: ProjectName={ProjectName}, StatusText={StatusText}, Rooms={RoomCount}, HideQuoteEdits={HideQuoteEdits}",
+                selectedProject?.ProjectName, statusText, rooms?.Count, HideQuoteEdits);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[LoadData] Exception occurred: {Message}", ex.Message);
+            throw;
+        }
+    }
+
+    public string GetProjectTotal()
+    {
+        // build project total
+        projectTotal = 0;
+        if(rooms.Count != 0)
+        {
+            foreach (var room in rooms)
+            {
+                if(room == null)
+                    continue;
+
+                if (!room.IsOptional)
+                    projectTotal += room.TotalCost();
+            }
+        }
+
+        return projectTotal.ToString("C");
+    }
+
+    public string GetDiscountAmount()
+    {
+        decimal discount = GetDiscountAmountDecimal();
+        return discount.ToString("C");
+    }
+
+    public decimal GetDiscountAmountDecimal()
+    {
+        decimal discount = 0;
+        if (discountAdjustment != null)
+        {
+            if (discountAdjustment.IsPercentage)
+            {
+                discount = (decimal)(projectTotal * ((float)discountAdjustment.Value / 100));
+            }
+            else
+            {
+                discount = discountAdjustment.Value;
+            }
+        }
+        return discount;
+    }
+
+    public async Task GetProjectTotalWithDiscount()
+    {
+        var discount = GetDiscountAmountDecimal();
+        discountTotal = Math.Round((decimal)projectTotal - discount, 2);
+
+        // Add a margin of error of ±1
+        var withinMarginOfError = (selectedProject.BaseAmount <= discountTotal + 1 && selectedProject.BaseAmount >= discountTotal - 1);
+
+        // Update Project with new Total BaseAmount
+        if (selectedProject != null && !withinMarginOfError )
+        {
+            // Save the project with the new total
+            await pricingService.UpdateProjectBaseAmountAsync(selectedProject.Id, discountTotal);
+            selectedProject.BaseAmount = discountTotal;            
+        }   
+        //_adjustedPrice = discountTotal.ToString("C");
+    }
+
+    public string GetProjectDiscount()
+    {
+        var discount = selectedProject.Adjustments.Find(x => x.Type == AdjustmentType.Discount);
+
+        if (discount == null)
+            return "0";
+
+        return discount.IsPercentage ? $"{discount.Value}%" : discount.Value.ToString("C");
+    }
+
+    public async Task SaveDiscountModal()
+    {
+        if(selectedProject.Adjustments.Count > 0)
+        {
+            await SaveDiscount();
+
+            // Recalculate projectTotal from rooms before computing the discount
+            projectTotal = 0;
+            foreach (var room in rooms)
+            {
+                if (room != null && !room.IsOptional)
+                    projectTotal += room.TotalCost();
+            }
+
+            await GetProjectTotalWithDiscount();
+            DiscountPopupVisible = false;
+            StateHasChanged();
+        }
+    }
+
+    public async Task AcceptQuoteModal()
+    {
+        selectedProject.StatusCodeId = 2;
+        await SaveProject();
+        await CopyCompanyHTMLReportsTemplateToProject();
+        await SendProjectNotificationAsync("Accepted Project Quote", EmailType.CustomerNotificationOfAcceptedQuote);
+
+        // Send acceptance notification to the company
+        await SendCompanyAcceptanceNotificationAsync();
+
+        HideQuoteEdits = true;
+        AcceptQuotePopupVisible = false;
+    }
+
+    /// <summary>
+    /// Sends a notification email to the company when a project is accepted.
+    /// </summary>
+    private async Task SendCompanyAcceptanceNotificationAsync()
+    {
+        if (company is null || string.IsNullOrWhiteSpace(company.Email))
+            return;
+
+        var customerName = $"{companyCustomer?.FirstName} {companyCustomer?.LastName}".Trim();
+        var quoteLink = $"https://bludog-software.com/rbp/reports/project-quote-report-main/{ProjectId}";
+
+        var body = $@"
+            <p>Project <strong>{selectedProject.ProjectName}</strong> has been accepted by {customerName}.</p>
+            <p>Customer Email: {selectedProject.CustomerEmail}</p>
+            <p>Customer Phone: {selectedProject.CustomerPhone}</p>
+            <p>Address: {selectedProject.Address1}, {selectedProject.City}, {selectedProject.StateCode} {selectedProject.ZipCode}</p>
+            <p>View quote: <a href='{quoteLink}'>{selectedProject.ProjectName} Quote</a></p>";
+
+        try
+        {
+            await pricingService.SendProjectEmailAsync(
+                selectedProject.ProjectGuid.ToString(),
+                $"Project Accepted - {selectedProject.ProjectName}",
+                body,
+                toAddress: company.Email,
+                senderName: "Quoted Notification",
+                senderEmail: company.Email);
+
+            snackbarPrimaryMessage = $"Company notification sent to {company.Email}.";
+            await snackbarPrimary.Show();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to send company acceptance notification");
+            snackbarPrimaryMessage = $"Project accepted but company notification failed: {ex.Message}";
+            await snackbarPrimary.Show();
+        }
+    }
+
+    public async Task DeleteProjectModal()
+    {
+        await pricingService.DeleteCustomerProjectAsync(selectedProject.Id);
+        NavigationManager.NavigateTo(customerProjectsURL);
+    }
+
+    public async Task DeleteRoomModal()
+    {
+        await pricingService.DeleteRoomAsync(selectedRoom.Id);
+        rooms.Remove(selectedRoom);
+        StateHasChanged();
+        DeleteRoomPopupVisible = false;
+        // await deleteRoomModal.Hide();
+        snackbarPrimaryMessage = $"{selectedRoom.Name} Deleted.";
+        await snackbarPrimary.Show();
+    }
+
+    public async Task SaveProject()
+    {
+        if (selectedProject.Id == 0)
+        {
+            try
+            {
+                selectedProject.CompanyCustomerGuidId = Guid.Parse(CustomerId);
+
+                // Normalize optional fields to prevent validation errors on empty strings
+                selectedProject.NormalizeOptionalFields();
+
+                // If we are copying another project then also pass the other project Guid on creation
+                if (copyAnotherProjectSelected)
+                    selectedProject = await pricingService.DuplicateCustomerProjectAsync(selectedCopyProjectGuid.ToString(), selectedProject);
+                else
+                    selectedProject = await pricingService.CreateCustomerProjectAsync(selectedProject);
+
+                ProjectId = selectedProject.ProjectGuid.ToString();           
+                snackbarPrimaryMessage = $"Successfully Created Project {selectedProject.ProjectName}.";
+                await snackbarPrimary.Show();
+                //SendProjectNotification("New Painting Project", EmailType.CustomerLinkToQuote);                
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Error creating project: {Message}", ex.Message);
+                snackbarPrimaryMessage = $"Failed to create project. Please try again. {ex.Message}";
+                await snackbarPrimary.Show();
+            }
+        }
+        else
+        {
+            // Normalize optional fields to prevent validation errors on empty strings
+            selectedProject.NormalizeOptionalFields();
+
+            await pricingService.UpdateCustomerProjectAsync(selectedProject);
+            snackbarPrimaryMessage = $"Updated Project {selectedProject.ProjectName}.";
+            await snackbarPrimary.Show();
+        }
+
+        statusText = statusCodes.Find(x => x.Id == selectedProject.StatusCodeId).StatusCodeName;
+        StateHasChanged();
+    }
+
+    public async Task SaveDiscount()
+    {
+        if (discountAdjustment.Id == 0)
+        {
+            discountAdjustment = await pricingService.CreateAdjustmentAsync(discountAdjustment);
+            snackbarPrimaryMessage = $"Created Discount {discountAdjustment.Value}.";
+            await snackbarPrimary.Show();
+        }
+        else
+        {
+            await pricingService.UpdateAdjustmentAsync(discountAdjustment.Id, discountAdjustment);
+            snackbarPrimaryMessage = $"Updated Discount {discountAdjustment.Value}.";
+            await snackbarPrimary.Show();
+        }
+    }
+
+    // Copy all the CompanyHTMLReportTemplates to the CompanyHTMLReports table and set the ProjectId to the current project id
+    public async Task CopyCompanyHTMLReportsTemplateToProject()
+    {
+        if (string.IsNullOrEmpty(ProjectId) || ProjectId == "0")
+        {
+            snackbarPrimaryMessage = "Project ID is not set. Cannot copy reports.";
+            await snackbarPrimary.Show();
+            return;
+        }
+        var reports = await pricingService.GetCompanyHTMLReportTemplatesByCompanyAsync(company.Id.ToString());
+        foreach (var report in reports)
+        {
+            // Check if the report already exists for the project
+            var existingReport = await pricingService.GetCompanyHTMLReportByTypeAndProjectAsync(report.ReportTypeId, ProjectId);
+            if (existingReport != null)
+            {
+                snackbarPrimaryMessage = $"Report of type {report.ReportTypeId} already exists for this project. Skipping copy.";
+                continue; // Skip copying if the report already exists
+            }
+
+            // Create a new report for the project
+            var newReport = new CompanyHTMLReport
+            {
+                CompanyGuid = report.CompanyGuid,
+                CompanyName = report.CompanyName,
+                ReportHTMLText = report.ReportHTMLText,
+                ReportTypeId = report.ReportTypeId,
+                IsGlobalTemplate = false,
+                LastUpdatedDateTime = DateTime.Now,
+                IsActive = true,
+                DisplayOrder = report.DisplayOrder,
+                ProjectGuid = Guid.Parse(ProjectId) // Set the ProjectId to the current project
+            };
+            await pricingService.CreateCompanyHTMLReportAsync(newReport);
+        }
+        snackbarPrimaryMessage = "Copied Company HTML Reports Template to Project.";
+        await snackbarPrimary.Show();
+    }
+
+    public int GetRoomNum()
+    {
+        roomNumber = roomNumber > rooms.Count ? 0 : roomNumber;
+        roomNumber++;
+        return roomNumber;
+    }
+
+    public Task SendProjectLink() =>
+    SendProjectNotificationAsync("Painting Quote", EmailType.CustomerLinkToQuote);
+
+    public async Task SendProjectNotificationAsync(string subject, EmailType emailType)
+    {
+        var toEmailAddress = string.IsNullOrEmpty(selectedProject.CustomerEmail)
+            ? "noone@360painting.com"
+            : selectedProject.CustomerEmail;
+
+        var contactNumber = "1-866-99-PAINT";
+        var contactEmail = company.Email;
+
+        var quoteLink = $"https://bludog-software.com/rbp/reports/projectquotereport/{ProjectId}";
+        if (emailType == EmailType.CustomerLinkToQuote && selectedProject.StatusCodeId == 2)
+            quoteLink = $"https://bludog-software.com/rbp/reports/project-quote-report-main/{ProjectId}";
+
+        var quoteLinkShortened = $"{selectedProject.ProjectName}-Quote";
+        var body = BuildEmailBody(quoteLink, quoteLinkShortened, contactNumber, contactEmail, emailType, selectedProject.ProjectName);
+
+        // send
+        await pricingService.SendEmailAsync(
+            toEmailAddress, subject, body, "Painting Quote",
+            company.Email, contactEmail, true,
+            selectedProject.ProjectGuid.ToString(), company.Id.ToString()
+        );
+
+        // ✅ business rule: New -> Proposed after sending proposal
+        if (selectedProject.StatusCodeId == 1 && emailType == EmailType.CustomerLinkToQuote)
+        {
+            selectedProject.StatusCodeId = 8; // Proposed
+            selectedProject.NormalizeOptionalFields();
+            await pricingService.UpdateCustomerProjectAsync(selectedProject);
+
+            statusText = statusCodes?.FirstOrDefault(x => x.Id == 8)?.StatusCodeName ?? statusText;
+            HideQuoteEdits = selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+        }
+
+        snackbarPrimaryMessage = $"Email Sent to {toEmailAddress}.";
+        await snackbarPrimary.Show();
+    }
+
+
+    private string BuildEmailBody(string quoteLink, string quoteLinkShortened, string contactNumber, string contactEmail, EmailType emailType, string custName = "Customer")
+    {
+        var emailTemplateManager = new EmailEditorTemplateManger();
+        var template = emailTemplateManager.GetEmailTemplateById(emailType);
+        string companySignature = GetCompanySignature();
+
+        var templateBody = template.Body + companySignature;
+        var body = string.Format(templateBody, custName, company.CompanyName, quoteLink, quoteLinkShortened, contactNumber, contactEmail);
+
+        return body;
+    }
+
+    // Get Company singnature
+    public string GetCompanySignature()
+    {
+        return $@"<p/>Best regards,<br/>
+            <br />
+    {company.CompanyName}<br/>
+            O: {company.PhoneNumber}<br/>
+            <a href='http://www.360painting.com/'>www.360painting.com</a>";
+    }
+
+    public string GetRoomOptions(Room room)
+    {
+        string options = "";
+        options = GetRoomOptionText("Walls", room.IncludeWalls);
+        options += GetRoomOptionText("Windows", room.IncludeWindows, options.Length > 0);
+        options += GetRoomOptionText("Doors", room.IncludeDoors, options.Length > 0);
+        options += GetRoomOptionText("Ceilings", room.IncludeCeilings, options.Length > 0);
+        options += GetRoomOptionText("Baseboards", room.IncludeBaseboards, options.Length > 0);
+        options += GetRoomOptionText("Crown Molding", room.IncludeCrownMoldings, options.Length > 0);
+        return options;
+    }
+
+    // Pass in a string with an Include boolean with another boolean if there should be a forward slash appended to the front of the string
+    public string GetRoomOptionText(string options, bool include, bool appendForwardSlash = false)
+    {
+        if (include)
+            options = appendForwardSlash ? $"/{options}" : $"{options}";
+        else
+            options = "";
+        return options;
+    }
+
+    // Return the room measurements as a string
+    public string GetRoomMeasurements(Room room)
+    {
+        string measurements = "";
+        measurements = $"L({room.Length}) x W({room.Width}) x H({room.Height})";
+        return measurements;
+    }
+
+    private void HandleAddressSelected(AddressDetailsDto address)
+    {
+        // Print the selected address
+        Console.WriteLine($"Formatted Address: {address.FormattedAddress}");
+
+        selectedProject.Address1 = address.Street;
+        selectedProject.Address2 = "";
+        selectedProject.City = address.City;
+        selectedProject.StateCode = address.State;
+        selectedProject.ZipCode = address.PostalCode;
+
+        editContext?.Validate();
+        StateHasChanged();
+    }
+
+    public async Task SaveProjectModal()
+    {
+        // var isValid = validations.ValidateAll();
+        bool isValid = true; // Assume validation passes for simplicity
+        if (isValid)
+        {
+            // Capture the copy state before resetting
+            bool wasCopyingProject = copyAnotherProjectSelected;
+            Guid copyFromProjectGuid = selectedCopyProjectGuid;
+            
+            await SaveProject();
+            EditProjectModalVisible = false;
+            copyAnotherProjectSelected = false;
+            StateHasChanged();
+
+            if (selectedProject.Id == 0)
+            {
+                snackbarPrimaryMessage = "Unable to save project. Please try again."; 
+                await snackbarPrimary.Show();
+                return;
+            }
+
+            var roomCount = rooms?.Count ?? 0;
+            Console.WriteLine($"Project Area Count: {roomCount}");
+            
+            // If we copied from another project, the rooms should already be copied by DuplicateCustomerProjectAsync
+            // We just need to reload the rooms and stay on this page
+            if (wasCopyingProject && copyFromProjectGuid != Guid.Empty)
+            {
+                Console.WriteLine("Project was copied. Reloading rooms.");
+                rooms = await pricingService.GetRoomsByProjectIdAsync(selectedProject.Id) ?? new List<Room>();
+                snackbarPrimaryMessage = $"Copied {rooms.Count} rooms from the selected project.";
+                await snackbarPrimary.Show();
+                StateHasChanged();
+            }
+            // If we have a project with no areas and didn't copy, go to the house wizard
+            else if (roomCount == 0)
+            {
+                Console.WriteLine("Navigating to the House Wizard.");
+                NavigationManager.NavigateTo("pricing/project-house-wizard/" + ProjectId);
+            }
+        }
+        else
+        {
+            snackbarPrimaryMessage = "Unable to save project. Please try again.";
+            snackbarPrimary.Show();
+        }
+
+        return;
+    }
+
+    // Get the QuotePdf for the project
+    public void GetQuotePdf()
+    {
+        snackbarPrimaryMessage = "Downloading Quote...";
+        snackbarPrimary.AnimationDuration = 1500;
+        snackbarPrimary.Interval = 8500;
+        snackbarPrimary.Show();
+        // Generate the base URL using the current request context
+        var baseUrl = GetBaseUrl();
+        // Append the project ID to the URL
+        //var quotePdfUrl = $"{baseUrl}api/QuotePdf/Interior/{ProjectId}";
+        //var quotePdfUrl = $"{baseUrl}api/Report/Project/QuotePage/{ProjectId}";
+        var quotePdfUrl = $"{baseUrl}api/Report/Interior/{ProjectId}";
+        // Download the PDF using JavaScript interop
+        NavigationManager.NavigateTo(quotePdfUrl);
+    }
+
+    private string GetBaseUrl()
+    {
+        // Use NavigationManager instead of HttpContextAccessor
+        var baseUri = NavigationManager.BaseUri;
+        
+        // Ensure the URL ends with a trailing slash
+        if (!baseUri.EndsWith("/"))
+        {
+            baseUri += "/";
+        }
+
+        return baseUri;
+    }
+
+    public Task HandleInvalidProjectSubmit()
+    {
+        snackbarPrimaryMessage = "Please correct the errors in the form.";
+        snackbarPrimary.Show();
+        showEditFields = true;
+        return Task.CompletedTask;
+    }
+
+    private Task HideProjectModal()
+    {
+        snackbarPrimaryMessage = "Closing Project Modal.";
+        snackbarPrimary.Show();
+        EditProjectModalVisible = false;
+        return Task.CompletedTask;
+    }
+
+    private void ShowEmailPopup()
+    {
+        emailPopupAddress = selectedProject.CustomerEmail;
+        EmailPopupVisible = true;
+    }
+
+    private async Task ConfirmSendProjectLink()
+    {
+        selectedProject.CustomerEmail = emailPopupAddress;
+        EmailPopupVisible = false;
+        await SendProjectLink();
+    }
+
+    // Handler for copying rooms from another project
+    public async Task CopyRoomsFromProject(Guid projectGuid)
+    {
+        isCopyingRooms = true;
+        try
+        {
+            var duplicatedProject = await pricingService.DuplicateCustomerProjectAsync(projectGuid.ToString(), selectedProject);
+            selectedProject = duplicatedProject;
+            rooms = await pricingService.GetRoomsByProjectIdAsync(selectedProject.Id);
+            snackbarPrimaryMessage = $"Copied rooms from project.";
+            await snackbarPrimary.Show();
+        }
+        catch (Exception ex)
+        {
+            snackbarPrimaryMessage = $"Failed to copy rooms: {ex.Message}";
+            await snackbarPrimary.Show();
+        }
+        isCopyingRooms = false;
+        StateHasChanged();
+    }
+
+    // Add handler for checkbox
+    private async Task OnCopyProjectCheckChanged(bool value)
+    {
+        copyAnotherProjectSelected = value;
+        allCustomers.Clear();
+        customerProjectsDict.Clear();
+        selectedCopyCustomerId = 0;
+        selectedCopyProjectGuid = Guid.Empty;
+        if (copyAnotherProjectSelected)
+        {
+            isLoadingCopyMenu = true;
+            allCustomers = await pricingService.GetAllCompanyCustomersByGuidAsync(companyCustomer.CompanyId.ToString());
+            isLoadingCopyMenu = false;
+            snackbarPrimaryMessage = $"Found {allCustomers.Count} customers.";
+            await snackbarPrimary.Show();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSelectedCopyCustomerChanged(int customerId)
+    {
+        if (customerId != 0)
+        {
+            selectedCopyCustomerId = customerId;
+            customerProjectsDict.Remove(customerId); // Clear previous projects for this customer
+            var projects = await pricingService.GetAllCustomerProjectsAsync(customerId);
+            customerProjectsDict[customerId] = projects;
+            StateHasChanged();
+        }
+    }
+
+    private bool previousShowCopyProjectMenu = false;
+    private int previousSelectedCopyCustomerId = 0;
+
+    private bool? ParseSelection(string selection)
+    {
+        return selection switch
+        {
+            "Include" => true,
+            "Exclude" => false,
+            _ => (bool?)null
+        };
+    }
+
+    private async Task ApplyGlobalRoomSettingsAsync()
+    {
+        try
+        {
+            if (selectedProject.StatusCodeId == 2)
+            {
+                snackbarPrimaryMessage = "Project is accepted. Global changes are not allowed.";
+                await snackbarPrimary.Show();
+                return;
+            }
+
+            var request = new RoomInclusionsRequest
+            {
+                IncludeWalls = ParseSelection(includeWallsSelection),
+                IncludeCeilings = ParseSelection(includeCeilingsSelection),
+                IncludeDoors = ParseSelection(includeDoorsSelection),
+                IncludeWindows = ParseSelection(includeWindowsSelection),
+                IncludeBaseboards = ParseSelection(includeBaseboardsSelection),
+                IncludeCrownMoldings = ParseSelection(includeCrownMoldingSelection)
+            };
+
+            var updatedCount = await pricingService.UpdateRoomInclusionsAsync(selectedProject.Id, request);
+
+            int paintUpdatedCount = 0;
+            if (changePaintQuality && selectedPaintQualityId > 0)
+            {
+                try
+                {
+                    paintUpdatedCount = await pricingService.UpdateRoomPaintQualityAsync(selectedProject.Id, selectedPaintQualityId);
+                }
+                catch (Exception ex)
+                {
+                    snackbarPrimaryMessage = $"Failed to update paint quality: {ex.Message}";
+                    await snackbarPrimary.Show();
+                }
+            }
+
+            GlobalChangesPopupVisible = false;
+            StateHasChanged();
+
+            await loadingIndicator.Show();
+
+            await pricingService.PriceHouseInteriorAsync(selectedProject.Id);
+
+            rooms = await pricingService.GetRoomsByProjectIdAsync(selectedProject.Id);
+
+            // Recalculate project total from the repriced rooms
+            projectTotal = 0;
+            foreach (var room in rooms)
+            {
+                if (room != null && !room.IsOptional)
+                    projectTotal += room.TotalCost();
+            }
+
+            // Update the persisted BaseAmount (accounts for any active discount)
+            await GetProjectTotalWithDiscount();
+
+            if (paintUpdatedCount > 0)
+                snackbarPrimaryMessage = $"Applied global settings to {updatedCount} rooms, updated paint quality for {paintUpdatedCount} rooms and recalculated totals.";
+            else
+                snackbarPrimaryMessage = $"Applied global settings to {updatedCount} rooms and recalculated totals.";
+            await snackbarPrimary.Show();
+        }
+        catch (Exception ex)
+        {
+            snackbarPrimaryMessage = $"Failed to apply global settings: {ex.Message}";
+            await snackbarPrimary.Show();
+        }
+        finally
+        {
+            await loadingIndicator.Hide();
+        }
+    }
+
+    private ProjectEmailSender? projectEmailSender;
+
+    private async Task SendEmailFromPopup()
+    {
+        if (projectEmailSender != null)
+        {
+            await projectEmailSender.SendAsync();
+        }
+        EmailPopupVisible = false;
+        snackbarPrimaryMessage = "Email sent.";
+        await snackbarPrimary.Show();
+    }
+
+    private bool showAddressFields = false;
+
+    private string GetFullAddress()
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(selectedProject.Address1))
+            parts.Add(selectedProject.Address1);
+        if (!string.IsNullOrWhiteSpace(selectedProject.City))
+            parts.Add(selectedProject.City);
+        if (!string.IsNullOrWhiteSpace(selectedProject.StateCode))
+            parts.Add(selectedProject.StateCode);
+        if (!string.IsNullOrWhiteSpace(selectedProject.ZipCode))
+            parts.Add(selectedProject.ZipCode);
+        return string.Join(", ", parts);
+    }
+
+    private Task OnStatusChangedFromPanel(int newStatusId)
+    {
+        // keep the inline dropdown in sync immediately
+        inlineStatusId = newStatusId;
+
+        // if you want panel save to ONLY update UI (and panel already saved DB),
+        // use ApplyStatusUI(newStatusId). If you want belt+suspenders, call SaveStatusAsync.
+        return ApplyStatusUIAsync(newStatusId);
+    }
+
+    private Task OnProjectChangedFromPanel(ProjectData updated)
+    {
+        selectedProject = updated;
+
+        inlineStatusId = selectedProject.StatusCodeId;
+        statusText = statusCodes?.FirstOrDefault(x => x.Id == selectedProject.StatusCodeId)?.StatusCodeName ?? statusText;
+
+        HideQuoteEdits = selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task ApplyStatusUIAsync(int newStatusId)
+    {
+        if (selectedProject is null) return Task.CompletedTask;
+
+        selectedProject.StatusCodeId = newStatusId;
+        statusText = statusCodes?.FirstOrDefault(x => x.Id == newStatusId)?.StatusCodeName ?? statusText;
+
+        HideQuoteEdits = selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task SetStatusAsync(int newStatusId)
+    {
+        if (selectedProject is null || isSavingInlineStatus) return;
+
+        // Prevent duplicate saves
+        if (newStatusId == selectedProject.StatusCodeId) return;
+
+        isSavingInlineStatus = true;
+        StateHasChanged();
+
+        try
+        {
+            var previousStatusId = selectedProject.StatusCodeId;
+
+            // Update the project status
+            selectedProject.StatusCodeId = newStatusId;
+
+            // Normalize optional fields to prevent validation errors on empty strings
+            selectedProject.NormalizeOptionalFields();
+
+            await pricingService.UpdateCustomerProjectAsync(selectedProject);
+
+            // Update UI
+            inlineStatusId = newStatusId;
+            statusText = statusCodes?.FirstOrDefault(x => x.Id == newStatusId)?.StatusCodeName ?? statusText;
+            HideQuoteEdits = selectedProject.StatusCodeId >= 2 && selectedProject.StatusCodeId != 8;
+
+            snackbarPrimaryMessage = "Project status updated successfully.";
+            await snackbarPrimary.Show();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to update project status");
+            snackbarPrimaryMessage = "Failed to update project status. Please try again.";
+            await snackbarPrimary.Show();
+
+            // Revert UI on error
+            selectedProject.StatusCodeId = inlineStatusId;
+            statusText = statusCodes?.FirstOrDefault(x => x.Id == inlineStatusId)?.StatusCodeName ?? statusText;
+        }
+        finally
+        {
+            isSavingInlineStatus = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetRoomThumbnailUrl(int imageId)
+    {
+        var baseUri = NavigationManager.BaseUri;
+        return $"{baseUri}api/RoomImage/Thumbnail/{imageId}";
+    }
+
+    private async Task HandleImageChanged()
+    {
+        // Reload the rooms to get updated image IDs
+        if (selectedProject?.Id > 0)
+        {
+            rooms = await pricingService.GetRoomsByProjectIdAsync(selectedProject.Id) ?? new List<Room>();
+            StateHasChanged();
+        }
+    }
+
+
+
+}

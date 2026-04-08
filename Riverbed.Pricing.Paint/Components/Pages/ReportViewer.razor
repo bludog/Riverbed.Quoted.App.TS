@@ -1,0 +1,29 @@
+﻿@page "/ReportViewer"
+
+@using DevExpress.Blazor.Reporting
+@using DevExpress.XtraReports.UI
+
+@rendermode InteractiveServer
+
+<link href="_content/DevExpress.Blazor.Themes/blazing-berry.bs5.css" rel="stylesheet" />
+<link href="_content/DevExpress.Blazor.Reporting.Viewer/css/dx-blazor-reporting-components.bs5.css" rel="stylesheet" />
+<h3>ReportViewer</h3>
+
+<DxReportViewer @ref="reportViewer" Report="@report"/>
+
+@code {
+    //[Parameter] public string CustomerProjectGuid { get; set; }
+    DxReportViewer? reportViewer;
+    XtraReport report = new CustomerProjectQuoteVI();
+
+//     public override async Task SetParametersAsync(ParameterView parameters)
+//     {
+//         ShowReport();
+//     }
+
+//     void ShowReport()
+//     {
+//         report.Parameters["CustomerProjectGuid"].Value = CustomerProjectGuid;
+//         reportViewer.Report = report;
+//     }
+ }

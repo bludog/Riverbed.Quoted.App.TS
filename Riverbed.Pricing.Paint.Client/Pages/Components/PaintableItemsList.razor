@@ -1,0 +1,483 @@
+@page "/paintable-items"
+@using Blazorise
+@using DevExpress.Blazor
+@inject ILogger<PaintableItemsList> localLogger
+@inject IToastService ToastService
+@inject IPricingService PaintableItemService
+@rendermode InteractiveWebAssembly
+
+<Card Style="display: flex; flex-direction: column; flex: 1 1 auto;">
+    <CardHeader>
+        <CardTitle>
+            <h4>Paintable Items</h4>
+        </CardTitle>
+        <CardActions Class="ms-auto">
+            <Button Color="Color.Success" Clicked="@ShowAddSelector">
+                <Icon Name="IconName.Add" /> Add
+            </Button>
+        </CardActions>
+    </CardHeader>
+    <CardBody Style="flex: 1 1 auto; overflow: visible; display: flex; flex-direction: column;">
+        <LoadingIndicator @bind-Loading="@isLoading" Style="display: flex; flex-direction: column; flex: 1 1 auto;">
+            <ChildContent>
+                @if (items != null && items.Any())
+                {
+                    <ListView TItem="PaintableItem"
+                              Data="@items"
+                              TextField="@(item => item.Name)"
+                              ValueField="@(item => item.Id.ToString())"
+                              Scrollable="false"
+                              Style="height: auto !important; max-height: none !important;">
+                        <ItemTemplate>
+                            <Div Class="d-flex justify-content-between align-items-start w-100">
+                                <Div>
+                                    <Heading Size="HeadingSize.Is6">@context.Item.Name</Heading>
+                                    <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                                        <small>@context.Item.Price.ToString("C2") | @pricingTypes.FirstOrDefault(pt => pt.Id == context.Item.PricingTypeId)?.PricingTypeName Count: @context.Item.Count</small>
+                                    </Div>
+                                    <Div>
+                                        <Button Size="Size.Small" Color="Color.Link"
+                                                Clicked="@(() => ShowEditModal(context.Item))">
+                                            Edit
+                                        </Button>
+                                        <Button Size="Size.Small" Color="Color.Link"
+                                                Clicked="@(() => ShowDeleteConfirmation(context.Item))">
+                                            Delete
+                                        </Button>                                        
+                                    </Div>
+                                </Div>
+                                <Div Class="text-end">
+                                    <Heading TextWeight="TextWeight.Bold" Size="HeadingSize.Is6">@((context.Item.Price * context.Item.Count).ToString("C2"))</Heading>
+                                </Div>
+                            </Div>
+                        </ItemTemplate>
+                    </ListView>
+                }
+                else if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <Alert Color="Color.Danger">
+                        <AlertMessage>@errorMessage</AlertMessage>
+                    </Alert>
+                }
+                else
+                {
+                    <Alert Color="Color.Info">
+                        <AlertMessage>No items found.</AlertMessage>
+                    </Alert>
+                }
+            </ChildContent>
+        </LoadingIndicator>
+    </CardBody>
+</Card>
+
+<!-- New Item Selection Modal -->
+<Modal @ref="selectionModal">
+    <ModalContent>
+        <ModalHeader>
+            <ModalTitle>Select Company Paintable Item</ModalTitle>
+            <CloseButton Clicked="() => selectionModal.Hide()" />
+        </ModalHeader>
+        <ModalBody>
+            <Row>
+                <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile.Is6.OnTablet" >
+                    <Field>
+                        <FieldLabel>Select Category</FieldLabel>
+                        <Select TValue="int?" @bind-SelectedValue="selectedCategoryId" @oninput="OnCategoryChanged">
+                            <SelectItem Value="@(default(int?))" Disabled="true">-- Select Category --</SelectItem>
+                            @foreach (var cat in paintableItemCategories)
+                            {
+                                <SelectItem Value="@cat.Id">@cat.Name</SelectItem>
+                            }
+                        </Select>
+                    </Field>
+                </Column>
+                <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile.Is6.OnTablet">
+                    @if (selectedCategoryId != null && filteredCompanyPaintableItems.Any())
+                    {
+                        <Field>
+                            <FieldLabel>Select Item</FieldLabel>
+                            <Select TValue="int?" @bind-SelectedValue="companyPaintableItemId">
+                                <SelectItem Value="@(default(int?))" Disabled="true">-- Select Item --</SelectItem>
+                                @foreach (var item in filteredCompanyPaintableItems)
+                                {
+                                    <SelectItem Value="@item.Id">@item.Name</SelectItem>
+                                }
+                            </Select>
+                        </Field>
+                    }
+                </Column>
+            </Row>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Primary" Clicked="OnCompanyPaintableItemSelected" Disabled="companyPaintableItemId == null">Continue</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+<Modal @ref="itemModal">
+    <ModalContent Size="ModalSize.Large">
+        <ModalHeader>
+            <ModalTitle>@(isEditMode ? "Edit Paintable Item" : "Add Paintable Item")</ModalTitle>
+            <CloseButton Clicked="CloseModal" />
+        </ModalHeader>
+
+        <ModalBody>
+            <LoadingIndicator @bind-Loading="isProcessing">
+                <Row>
+                    <Column md="6">
+                        <Field>
+                            <FieldLabel>Name</FieldLabel>
+                            <TextEdit @bind-Text="selectedItem.Name" />
+                        </Field>
+                    </Column>
+                    <Column md="6">
+                        <Field>
+                          <FieldLabel>Price</FieldLabel>                     
+                            <NumericPicker TValue="decimal"
+                                         @bind-Value="selectedItem.Price"
+                                         Min="0"
+                                         ModifyValueOnWheel="true"
+                                         WheelOn="NumericWheelOn.Focus"                                         
+                                         CurrencySymbol="$"
+                                         Culture="en-US" />   
+                        </Field>
+                    </Column>
+                </Row>
+                <Row>
+                    <Column md="6">
+                        <Field>
+                            <FieldLabel>Pricing Type</FieldLabel>
+                            <Select TValue="int"
+                                    @bind-SelectedValue="selectedItem.PricingTypeId">
+                                @foreach (var pr in pricingTypes)
+                                {
+                                    <SelectItem Value="@pr.Id">@pr.PricingTypeName</SelectItem>
+                                }
+                            </Select>
+                        </Field>
+                    </Column>
+                    <Column md="6">
+                        <Field>
+                            <FieldLabel>Count</FieldLabel>
+                            <NumericEdit TValue="int"
+                                         @bind-Value="selectedItem.Count" />
+                        </Field>
+                    </Column>
+                </Row>            
+                <Row>
+                    <Column md="12">
+                        <Field>
+                            <FieldLabel>Description</FieldLabel>
+                            <TextEdit @bind-Text="selectedItem.Description" />
+                        </Field>
+                    </Column>
+                    
+                </Row>
+
+                <Field>
+                    <Button Color="Color.Link"
+                            Clicked="() => ShowAdvanced = !ShowAdvanced"
+                            Class="px-0">
+                        @(ShowAdvanced ? "? Hide Advanced Settings" : "? Advanced Settings")
+                    </Button>
+                </Field>
+
+                @if (ShowAdvanced)
+                {
+                    <Row>
+                        <Column md="6">
+                            <Field>
+                                <FieldLabel>Paint Type</FieldLabel>
+                                <Select TValue="int"
+                                        @bind-SelectedValue="selectedItem.PaintTypeId">
+                                    @foreach (var pt in paintTypes)
+                                    {
+                                        <SelectItem Value="@pt.Id">@pt.PaintTypeName</SelectItem>
+                                    }
+                                </Select>
+                            </Field>
+                        </Column>
+                        <Column md="6">
+                            <Field>
+                                <FieldLabel>Sq Ft</FieldLabel>
+                                <NumericEdit TValue="double"
+                                             @bind-Value="selectedItem.SquareFootage" />
+                            </Field>
+                        </Column>
+                       
+                    </Row>
+                    <Row>
+                        <Column md="6">
+                            <Field>
+                                <FieldLabel>Base Time</FieldLabel>
+                                <NumericEdit TValue="double"
+                                             @bind-Value="selectedItem.BaseTime" />
+                            </Field>
+                        </Column>
+                        <Column md="6">
+                            <Field>
+                                <FieldLabel>Additional Time</FieldLabel>
+                                <NumericEdit TValue="double"
+                                             @bind-Value="selectedItem.AdditionalTime" />
+                            </Field>
+                        </Column>
+                    </Row>
+                    <Row>
+                        
+                        <Column md="6">
+                            <Field>
+                                <FieldLabel>Coats</FieldLabel>
+                                <NumericEdit TValue="int"
+                                             @bind-Value="selectedItem.Coats" />
+                            </Field>
+                        </Column>
+                    </Row>
+                }
+            </LoadingIndicator>
+        </ModalBody>
+
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="CloseModal">Cancel</Button>
+            <Button Color="Color.Primary"
+                    Clicked="SaveItem"
+                    Disabled="@isProcessing"
+                    Class="ml-2">
+                Save
+            </Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+
+
+<!-- Delete Confirmation Modal -->
+<Modal @ref="deleteModal">
+    <ModalContent>
+        <ModalHeader>
+            <ModalTitle>Delete Item</ModalTitle>
+            <CloseButton Clicked="CloseDeleteModal" />
+        </ModalHeader>
+        <ModalBody>
+            <Paragraph>Are you sure you want to delete <strong>@itemToDelete?.Name</strong>?</Paragraph>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="CloseDeleteModal">Cancel</Button>
+            <Button Color="Color.Danger" Clicked="DeleteItem">Delete</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code {
+    private List<PaintableItem> items = new();
+    private PaintableItem selectedItem = new();
+    private PaintableItem itemToDelete;
+    private List<PaintType> paintTypes = new();
+    private List<PricingType> pricingTypes = new();
+    private List<CompanyPaintableItemSummary> companyPaintableItemsSummaries = new();
+    private List<PaintableItemCategory> paintableItemCategories = new();
+    private int? companyPaintableItemId;
+    private int? selectedCategoryId;
+    private IEnumerable<CompanyPaintableItemSummary> filteredCompanyPaintableItems =>
+        selectedCategoryId == null
+            ? Enumerable.Empty<CompanyPaintableItemSummary>()
+            : companyPaintableItemsSummaries.Where(x => x.PaintableItemCategoryId == selectedCategoryId);
+
+    bool ShowAdvanced = false;
+
+    private Modal itemModal;
+    private Modal deleteModal;
+    private Modal selectionModal;
+    private bool isLoading;
+    private bool isProcessing;
+    private bool isEditMode;
+    private string errorMessage;
+
+    [Parameter] public int RoomId { get; set; }
+
+    private async Task SaveItem()
+    {
+        isProcessing = true;
+        try
+        {
+            if (isEditMode)
+            {
+                await PaintableItemService.UpdatePaintableItemAsync(selectedItem);
+                await ToastService.Success("Item updated successfully.");
+            }
+            else
+            {
+                localLogger.LogInformation("Saving new PaintableItem: {@Item}", selectedItem);
+                await PaintableItemService.CreatePaintableItemAsync(selectedItem);
+                await ToastService.Success("Item created successfully.");
+            }
+
+            await itemModal.Hide();
+            await LoadItems();
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error saving item");
+            await ToastService.Error("Failed to save item.");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private Task CloseModal() => itemModal.Hide();
+
+    private Task CloseDeleteModal() => deleteModal.Hide();
+
+    private async Task DeleteItem()
+    {
+        try
+        {
+            await PaintableItemService.DeletePaintableItemAsync(itemToDelete.Id);
+            await ToastService.Success("Item deleted successfully.");
+            await deleteModal.Hide();
+            await LoadItems();
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error deleting item");
+            await ToastService.Error("Failed to delete item.");
+        }
+    }
+
+    [Parameter] public string CompanyGuid { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RoomId == 0 || CompanyGuid == null)
+            return;
+
+        localLogger.LogInformation("Parameters set for PaintableItemsList with RoomId: {RoomId}, CompanyGuid: {CompanyGuid}", RoomId, CompanyGuid);
+
+        await LoadLookups();
+        await LoadItems();
+        await LoadCompanyItems();
+    }
+
+    private async Task LoadLookups()
+    {
+        try
+        {
+            paintTypes = await PaintableItemService.GetAllPaintTypesAsync();
+            pricingTypes = await PaintableItemService.GetAllPricingTypesAsync();
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error loading lookups");
+            await ToastService.Error("Failed to load dropdown options.");
+        }
+    }
+
+    private async Task LoadItems()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            if (RoomId == 0)
+            {
+                errorMessage = "Invalid RoomId.";
+                await ToastService.Warning(errorMessage);
+                return;
+            }
+            localLogger.LogInformation("Loading All PaintableItems for RoomId {RoomId}", RoomId);            
+            items = await PaintableItemService.GetAllPaintableItemsAsync(RoomId);
+            localLogger.LogInformation("Loaded {Count} items for RoomId {RoomId}", items.Count, RoomId);
+
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error loading paintable items");
+            errorMessage = "Failed to load items.";
+            await ToastService.Error(errorMessage);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadCompanyItems()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(CompanyGuid))
+            {
+                companyPaintableItemsSummaries = await PaintableItemService.GetAllCompanyPaintableItemSummariesAsync(CompanyGuid);
+                paintableItemCategories = await PaintableItemService.GetAllPaintableItemCategoriesAsync();
+            }
+            
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error loading company items");
+        }
+    }
+
+    private async Task ShowAddSelector()
+    {
+        companyPaintableItemId = null;
+        await selectionModal.Show();
+    }
+
+    private async Task OnCompanyPaintableItemSelected()
+    {
+        if (companyPaintableItemId == null)
+        {
+            await ToastService.Warning("Please select a valid item.");
+            return;
+        }
+
+        // Fetch the full CompanyPaintableItem from the service
+        var companyitem = await PaintableItemService.GetCompanyPaintableItemAsync(companyPaintableItemId.Value, CompanyGuid);
+        if (companyitem == null)
+        {
+            await ToastService.Warning("Could not find the selected item.");
+            return;
+        }
+
+        selectedItem = new PaintableItem
+        {
+            Id = 0,
+            Name = companyitem.Name,
+            Description = companyitem.Description,
+            Price = companyitem.Price,
+            PaintTypeId = companyitem.PaintTypeId,
+            PricingTypeId = companyitem.PricingTypeId,
+            SquareFootage = companyitem.SquareFootage,
+            BaseTime = companyitem.BaseTime,
+            AdditionalTime = 0.0,
+            Count = 1,
+            Coats = 2,
+            RoomId = RoomId
+        };
+
+        await selectionModal.Hide();
+        isEditMode = false;
+        await itemModal.Show();
+    }
+
+    private async Task ShowEditModal(PaintableItem item)
+    {
+        selectedItem = new PaintableItem(item);
+        isEditMode = true;
+        await itemModal.Show();
+    }
+
+    private async Task ShowDeleteConfirmation(PaintableItem item)
+    {
+        itemToDelete = item;
+        await deleteModal.Show();
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        selectedCategoryId = int.TryParse(e.Value?.ToString(), out var val) ? val : (int?)null;
+        companyPaintableItemId = null;
+    }
+}

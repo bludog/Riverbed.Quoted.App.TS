@@ -1,0 +1,235 @@
+@page "/quote-viewer/{ProjectId:guid}"
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Microsoft.EntityFrameworkCore
+@namespace Riverbed.Pricing.Paint.Components.Pages
+@inject PricingDbContext DbContext
+@rendermode InteractiveServer
+
+<LoadingIndicator @ref="loadingIndicator" Loaded="StartLoadingIndicator">
+    <Layout>
+        <LayoutContent>
+        <Card Margin="Margin.Is4.OnY">
+            <CardBody>
+                <Container>
+                    <Row>
+                        <Column ColumnSize="ColumnSize.Is8.OnWidescreen">
+                            <Heading Size="HeadingSize.Is5" Margin="Margin.Is0">@company?.CompanyName</Heading>
+                            <Div>@company?.Address1</Div>
+                            @if (!string.IsNullOrEmpty(company?.Address2))
+                            {
+                                <Div>@company?.Address2</Div>
+                            }
+                            <Div>@company?.City, @company?.StateCode @company?.ZipCode</Div>
+                            <Div>Call: @company?.PhoneNumber</Div>
+                        </Column>
+                        <Column ColumnSize="ColumnSize.Is4.OnWidescreen" TextAlignment="TextAlignment.End">
+                            <Heading Size="HeadingSize.Is1" Margin="Margin.Is0">QUOTE</Heading>                    
+                            <Div TextSize="TextSize.Small">Created: @DateTime.Now.ToString("M/d/yyyy h:mm:ss tt")</Div>
+                        </Column>
+                    </Row>
+
+                    <Divider Margin="Margin.Is4.OnY" />
+
+                    <Row>
+                        <Column ColumnSize="ColumnSize.Is12">
+                            <Fields>
+                                <Field Horizontal>
+                                    <FieldLabel TextSize="TextSize.Medium" TextWeight="TextWeight.Bold" ColumnSize="ColumnSize.Is2">Project:</FieldLabel>
+                                    <FieldBody ColumnSize="ColumnSize.Is10">
+                                        <Div>@projectData?.ProjectName</Div>
+                                        <Div>@projectData?.Address1</Div>
+                                        @if (!string.IsNullOrEmpty(projectData?.Address2))
+                                        {
+                                            <Div>@projectData?.Address2</Div>
+                                        }
+                                        <Div>@projectData?.City, @projectData?.StateCode @projectData?.ZipCode</Div>
+                                    </FieldBody>
+                                </Field>
+                            </Fields>
+                        </Column>
+                    </Row>
+
+                    <Heading Size="HeadingSize.Is4" Margin="Margin.Is4.FromTop.Is2.FromBottom">Project Areas</Heading>
+
+                    <Table Bordered Striped>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHeaderCell>Name</TableHeaderCell>
+                                <TableHeaderCell TextAlignment="TextAlignment.End">Optional Cost</TableHeaderCell>
+                                <TableHeaderCell TextAlignment="TextAlignment.End">Cost</TableHeaderCell>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            @foreach (var room in rooms)
+                            {
+                                <TableRow>
+                                    <TableRowCell>
+                                        <Text TextWeight="TextWeight.Bold">@room.Name</Text>
+                                        <div>
+                                            @GetRoomFeatures(room)
+                                        </div>
+                                    </TableRowCell>
+                                    <TableRowCell TextAlignment="TextAlignment.End">
+                                        @if (room.IsOptional)
+                                        {
+                                            @GetRoomTotal(room).ToString("$#,##0.00")
+                                        }
+                                        else
+                                        {
+                                            @("$0.00")
+                                        }
+                                    </TableRowCell>
+                                    <TableRowCell TextAlignment="TextAlignment.End">
+                                        @if (!room.IsOptional)
+                                        {
+                                            @GetRoomTotal(room).ToString("$#,##0.00")
+                                        }
+                                        else
+                                        {
+                                            @("$0.00")
+                                        }
+                                    </TableRowCell>
+                                </TableRow>
+                            }
+                        </TableBody>
+                        <TableFooter>
+                            <TableRow>
+                                @if (discountAmount > 0)
+                                {
+                                    <TableRowCell TextAlignment="TextAlignment.End" ColumnSpan="3" TextSize="TextSize.Heading4">Sub Total: @projectSubTotal.ToString("$#,##0.00")</TableRowCell>
+                                    <TableRowCell TextAlignment="TextAlignment.End" ColumnSpan="3" TextSize="TextSize.Heading4">Discount: @discountAmount.ToString("$#,##0.00")</TableRowCell>
+                                }
+                            </TableRow>
+                            <TableRow>
+                                <TableRowCell TextAlignment="TextAlignment.End" ColumnSpan="3" TextSize="TextSize.Heading3">Total: @projectTotal.ToString("$#,##0.00")</TableRowCell>
+                            </TableRow>
+                        </TableFooter>
+                    </Table>
+
+                    @if (!string.IsNullOrWhiteSpace(projectData?.ScopeOfWork))
+                    {
+                        <Card Margin="Margin.Is4.OnY">
+                            <CardHeader>
+                                <Heading Size="HeadingSize.Is5">Scope of Work</Heading>
+                            </CardHeader>
+                            <CardBody>
+                                <Text>@((MarkupString)projectData?.ScopeOfWork)</Text>
+                            </CardBody>
+                        </Card>
+                    }
+                </Container>
+            </CardBody>
+        </Card>
+        </LayoutContent>
+    </Layout>
+</LoadingIndicator>
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    private ProjectData projectData;
+    private Company company;
+    private CompanyCustomer customer;
+    private List<Room> rooms = new List<Room>();
+    private decimal projectTotal = 0;
+    private decimal projectSubTotal = 0;
+    private decimal discountAmount = 0;
+    private string customerName;
+    private LoadingIndicator loadingIndicator = new LoadingIndicator();
+
+    protected override async Task OnInitializedAsync()
+    {
+        //await loadingIndicator.Show();
+        await LoadData();
+        //await loadingIndicator.Hide();
+    }
+
+    private async Task LoadData()
+    {
+        // Load project data
+        projectData = await DbContext.Projects
+            .FirstOrDefaultAsync(p => p.ProjectGuid == ProjectId);
+
+        if (projectData != null)
+        {
+            // Load customer data
+            customer = await DbContext.CompanyCustomers
+                .FirstOrDefaultAsync(c => c.Id == projectData.CompanyCustomerId);
+
+            if (customer != null)
+            {
+                // Load company data
+                company = await DbContext.Companies
+                    .FirstOrDefaultAsync(c => c.Id == customer.CompanyId);
+            }
+
+            // Load rooms
+            rooms = await DbContext.Rooms
+                .Where(r => r.ProjectDataId == projectData.Id)
+                .ToListAsync();
+
+            // Calculate totals
+            CalculateTotals();
+        }
+    }
+
+    private void CalculateTotals()
+    {
+        projectSubTotal = 0;
+        projectTotal = 0;
+
+        foreach (var room in rooms)
+        {
+            if (!room.IsOptional)
+            {
+                projectSubTotal += GetRoomTotal(room);
+            }
+        }
+
+        projectTotal = projectSubTotal;
+
+        // Apply discount if any
+        if (projectData?.Adjustments != null && projectData.Adjustments.Any())
+        {
+            var discount = projectData.Adjustments.FirstOrDefault(a => a.Type == AdjustmentType.Discount);
+            if (discount != null)
+            {
+                if (discount.IsPercentage)
+                {
+                    discountAmount = projectTotal * ((decimal)discount.Value / 100);
+                }
+                else
+                {
+                    discountAmount = discount.Value;
+                }
+                projectTotal -= discountAmount;
+            }
+        }
+    }
+
+    private decimal GetRoomTotal(Room room)
+    {
+        decimal total = 0;
+        if (room.LaborCost.HasValue) total += (decimal)room.LaborCost.Value;
+        if (room.MaterialCost.HasValue) total += (decimal)room.MaterialCost.Value;
+        if (room.OverheadCost.HasValue) total += (decimal)room.OverheadCost.Value;
+        if (room.Profit.HasValue) total += (decimal)room.Profit.Value;
+        return total;
+    }
+
+    private string GetRoomFeatures(Room room)
+    {
+        var features = new List<string>();
+
+        if (room.IncludeWalls) features.Add("Walls");
+        if (room.IncludeCeilings) features.Add("Ceilings");
+        if (room.IncludeBaseboards) features.Add("Baseboards");
+        if (room.IncludeCrownMoldings) features.Add("Crown Molding");
+        if (room.IncludeDoors && room.NumberOfDoors > 0) features.Add($"Doors ({room.NumberOfDoors})");
+        if (room.IncludeWindows && room.NumberOfWindows > 0) features.Add($"Windows ({room.NumberOfWindows})");
+
+        return string.Join("/", features);
+    }
+}

@@ -1,0 +1,769 @@
+﻿
+@using Microsoft.AspNetCore.Authorization
+@using System.Net.Mail
+@using System.Net.Http.Json
+
+@layout NoMenuLayout
+@rendermode InteractiveWebAssembly
+@using Riverbed.Pricing.Paint.Shared.Data
+@inject HttpClient HttpClient
+
+
+<AuthorizeView Roles="Administrator,CompanyAdmin" Context="AuthCtx">
+    <Authorized>
+        @if (!isLoaded)
+        {
+            <LoadingIndicator Visible="true" FullScreen>
+                <div class="text-center py-5">
+                    <Spinner Color="Color.Primary" Size="Size.Large" />
+                    <div class="mt-2">Loading project data...</div>
+                </div>
+            </LoadingIndicator>
+        }
+        else
+        {
+            <div class="d-flex align-items-center mb-3">
+                 <Heading Size="HeadingSize.Is3" style="flex-grow: 1; text-align: center; margin-right: 90px;">Project Options</Heading>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <Heading Size="HeadingSize.Is5">Change Project Status</Heading>
+                </CardHeader>
+                <CardBody>
+                    <DxFormLayout>
+                        <DxFormLayoutItem Caption="Project Name" >
+                            <DxTextBox Text="@project?.ProjectName" ReadOnly="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Status" >
+                            <DxComboBox Data="@statusCodes"
+                                        TextFieldName="StatusCodeName"
+                                        ValueFieldName="Id"
+                                        @bind-Value="selectedStatusId"
+                                        NullText="Select Status">
+                            </DxComboBox>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem>
+                            <DxButton Text="Save Status" Click="OnSaveStatus" RenderStyle="ButtonRenderStyle.Primary" />
+                            <DxButton Text="Edit Project" Click="@(() => EditProjectModalVisible = true)" RenderStyle="ButtonRenderStyle.Dark" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                    <Snackbar @ref="snackbar" Color="SnackbarColor.Primary" Location="SnackbarLocation.Bottom">
+                        <SnackbarBody>@snackbarMessage</SnackbarBody>
+                    </Snackbar>
+                </CardBody>
+            </Card> 
+            <br/>
+
+            <EditProjectModal 
+                @bind-Visible="EditProjectModalVisible"
+                Project="project"
+                EditContext="editContext"
+                AllCustomers="allCustomers" 
+                CustomerProjectsDict="customerProjectsDict" 
+                ShowCopyProjectOption="false"
+                OnSave="SaveProjectModalAsync"
+                OnCancel="HideProjectModalAsync"
+                OnAddressSelected="HandleAddressSelected"
+                OnInvalidSubmit="HandleInvalidProjectSubmit" />
+
+            <LoadingIndicator @ref="loadingIndicator">
+                <Row Class="g-3">
+                    <!-- Left column: Emails, Estimate, Estimate Reports, Email History -->
+                    <Column ColumnSize="ColumnSize.Is12.OnMobile.Is12.OnTablet.Is6.OnDesktop.Is6">
+                         <Card class="mb-3">
+                            <CardHeader>
+                                <Heading Size="HeadingSize.Is5">Estimate</Heading>
+                            </CardHeader>
+                            <CardBody>
+                                @{
+                                    bool hasReports = companyHtmlReports != null && companyHtmlReports.Count > 0;
+                                }
+                                <DxButton Text="Create Estimate" Click="OnCreateEstimate" RenderStyle="ButtonRenderStyle.Primary" Visible="@(!hasReports)" />
+                                <DxButton Text="View Estimate" Click="OnViewEstimate" RenderStyle="ButtonRenderStyle.Dark" Visible="@hasReports" />
+                                <DxButton Text="Email Estimate" Click="OnEmailProject" RenderStyle="ButtonRenderStyle.Info" Visible="@hasReports" />
+                                <DxButton Text="Delete Estimate" Click="OnDeleteEstimate" RenderStyle="ButtonRenderStyle.Danger" class="ms-2" Visible="@hasReports" />
+                            </CardBody>
+                        </Card>
+
+                        <Card class="mb-3">
+                            <CardHeader>
+                                <Heading Size="HeadingSize.Is5">Estimate Pages</Heading>
+                            </CardHeader>
+                            <CardBody>
+                                @if (companyHtmlReports == null)
+                                {
+                                    <Spinner Color="Color.Primary" />
+                                }
+                                else if (companyHtmlReports.Count == 0)
+                                {
+                                    <Text>No reports found for this project.</Text>
+                                }
+                                else
+                                {
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <Blazorise.TableRowCell>Report Type</Blazorise.TableRowCell>
+                                                <Blazorise.TableRowCell>Last Updated</Blazorise.TableRowCell>
+                                                <Blazorise.TableRowCell>Actions</Blazorise.TableRowCell>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            @foreach (var report in companyHtmlReports)
+                                            {
+                                                <TableRow>
+                                                    <Blazorise.TableRowCell>@GetReportTypeName(report.ReportTypeId)</Blazorise.TableRowCell>
+                                                    <Blazorise.TableRowCell>@report.LastUpdatedDateTime.ToString("g")</Blazorise.TableRowCell>
+                                                    <Blazorise.TableRowCell>
+                                                        <Button Color="Color.Primary" Clicked="@(() => EditReport(report.Id, report.CompanyGuid))">Edit</Button>
+                                                    </Blazorise.TableRowCell>
+                                                </TableRow>
+                                            }
+                                        </TableBody>
+                                    </Table>
+                                }
+                            </CardBody>
+                        </Card>     
+
+						<Card class="mb-3">
+							<CardHeader>
+								<Heading Size="HeadingSize.Is5">Emails</Heading>
+							</CardHeader>
+							<CardBody>
+								<DxButton Text="Send Email" Click="OnEmailProject" RenderStyle="ButtonRenderStyle.Primary" />
+							</CardBody>
+						</Card>
+
+						<Card class="mb-3">
+							<CardHeader>
+								<Heading Size="HeadingSize.Is5">Project Tracker</Heading>
+							</CardHeader>
+							<CardBody>
+								<Text Class="mb-2 d-block">Push this project to the Project Tracker for scheduling and payment tracking.</Text>
+								<DxButton Text="@(isPushingToTracker ? "Pushing..." : "Push to Project Tracker")" 
+										  Click="OnPushToProjectTracker" 
+										  RenderStyle="ButtonRenderStyle.Success" 
+										  Enabled="@(!isPushingToTracker)" />
+							</CardBody>
+						</Card>
+
+						@if (editingReportId != null && editingCompanyGuid != null)
+						{
+							<Modal @bind-Visible="showEditModal" Style="min-width:600px;">
+								<ModalContent Size="ModalSize.Large">
+									<CompanyHTMLReportEdit ReportId="@editingReportId.Value" />
+								</ModalContent>
+								<ModalFooter>
+									<Button Color="Color.Secondary" Clicked="CloseEditDialog">Close</Button>
+								</ModalFooter>
+							</Modal>
+						}
+
+						<Modal @bind-Visible="showEmailModal" >
+							<ModalContent Size="ModalSize.ExtraLarge">
+								<ModalHeader>
+									<ModalTitle>Send Email</ModalTitle>
+								</ModalHeader>
+								<ModalBody>
+									<LoadingIndicator Visible="@isSendingEmail">
+										<Field>
+											<ProjectEmailSender @ref="projectEmailSender" ProjectGuid="@ProjectGuid.ToString()" ShowActions="false" />
+										</Field>
+									</LoadingIndicator>
+								</ModalBody>
+								<ModalFooter>
+									<Button Color="Color.Secondary" Disabled="@isSendingEmail" Clicked="@(() => showEmailModal = false)">Cancel</Button>
+									<Button Color="Color.Primary" Disabled="@isSendingEmail" Clicked="SendEmailFromPopup">
+										@(isSendingEmail ? (MarkupString)"<span class='spinner-border spinner-border-sm me-1'></span>Sending..." : (MarkupString)"Send Email")
+									</Button>
+								</ModalFooter>
+							</ModalContent>
+						</Modal>
+					</Column>
+
+					<!-- Right column: Cost Breakdown -->
+					<Column ColumnSize="ColumnSize.Is12.OnMobile.Is12.OnTablet.Is6.OnDesktop.Is6">
+						<Card class="h-100">
+							<CardHeader>
+								<Heading Size="HeadingSize.Is5">Cost Breakdown</Heading>
+							</CardHeader>
+							<CardBody>
+								<ProjectCostBreakdown ProjectId="@project?.ProjectGuid.ToString()" OnCostsCalculated="HandleCostsCalculated" />
+							</CardBody>
+						</Card>
+					</Column>
+				</Row>
+
+				<!-- Email History: full width below the two-column layout -->
+				<Row Class="g-3 mt-0">
+					<Column ColumnSize="ColumnSize.Is12">
+						<Card class="mb-3">
+							<CardHeader>
+								<Heading Size="HeadingSize.Is5">Email History</Heading>
+							</CardHeader>
+							<CardBody>
+								@if (emailLogs is null || emailLogs.Count == 0)
+								{
+									<Text>No emails have been sent for this project.</Text>
+								}
+								else
+								{
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<Blazorise.TableRowCell>Date</Blazorise.TableRowCell>
+												<Blazorise.TableRowCell>Subject</Blazorise.TableRowCell>
+												<Blazorise.TableRowCell>Type</Blazorise.TableRowCell>
+												<Blazorise.TableRowCell>To</Blazorise.TableRowCell>
+												<Blazorise.TableRowCell>Cc</Blazorise.TableRowCell>
+												<Blazorise.TableRowCell>Bcc</Blazorise.TableRowCell>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											@foreach (var log in emailLogs)
+											{
+												<TableRow>
+													<Blazorise.TableRowCell>@log.TimeSent.ToString("g")</Blazorise.TableRowCell>
+													<Blazorise.TableRowCell>@log.Subject</Blazorise.TableRowCell>
+													<Blazorise.TableRowCell>@(string.IsNullOrWhiteSpace(log.EmailTypeName) ? "—" : log.EmailTypeName)</Blazorise.TableRowCell>
+													<Blazorise.TableRowCell>@log.ToEmail</Blazorise.TableRowCell>
+													<Blazorise.TableRowCell>@log.CcEmail</Blazorise.TableRowCell>
+													<Blazorise.TableRowCell>@log.BccEmail</Blazorise.TableRowCell>
+												</TableRow>
+											}
+										</TableBody>
+									</Table>
+								}
+							</CardBody>
+						</Card>
+					</Column>
+				</Row>
+            </LoadingIndicator>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="text-center my-5">
+            <Heading Size="HeadingSize.Is4">You are not authorized to view this page.</Heading>
+            <Button Color="Color.Primary" Clicked="GoHome">Go Home</Button>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+
+    [Parameter, EditorRequired] public Guid ProjectGuid { get; set; }
+
+    [Parameter] public EventCallback<ProjectData> ProjectChanged { get; set; }
+    [Parameter] public EventCallback<int> StatusChanged { get; set; }
+
+    [Inject]
+    public IPricingService PricingService { get; set; }
+    [Inject]
+    public NavigationManager NavigationManager { get; set; }
+
+    private ProjectData? project;
+    private Company? company;
+    private CompanyCustomer? customer;
+    private List<StatusCode> statusCodes = new();
+    private int selectedStatusId;
+    private bool isLoaded = false;
+    private Snackbar snackbar;
+    private string snackbarMessage = string.Empty;
+    private bool isBusyEbid = false;
+    private LoadingIndicator loadingIndicator;
+
+    private List<CompanyHTMLReport>? companyHtmlReports;
+    private int? editingReportId = null;
+    private Guid? editingCompanyGuid = null;
+    private List<CompanyReportType> reportTypes = new();
+    private bool showEditModal = false;
+    private bool showEmailModal = false;
+    private bool isSendingEmail = false;
+    private bool isPushingToTracker = false;
+    private string emailAddress = string.Empty;
+    private List<EmailLogDto> emailLogs = new();
+    private string? projectView;
+
+    // Cost breakdown values (received from ProjectCostBreakdown component)
+    private decimal calculatedLaborSubtotal;
+    private decimal calculatedMaterialSubtotal;
+    private decimal calculatedGrandTotal;
+
+    // Edit Project Modal fields
+    private bool EditProjectModalVisible { get; set; } = false;
+    private EditContext editContext;
+    private List<CompanyCustomer> allCustomers { get; set; } = new();
+    private Dictionary<int, List<ProjectData>> customerProjectsDict { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(ProjectGuid.ToString()))
+        {
+            throw new ArgumentException("ProjectId cannot be null or empty.", nameof(ProjectGuid));
+        }
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        project = await PricingService.GetCustomerProjectAsync(ProjectGuid.ToString()!);
+        statusCodes = await PricingService.GetAllStatusCodesAsync();
+        selectedStatusId = project.StatusCodeId;
+        companyHtmlReports = await PricingService.GetCompanyHTMLReportsByProjectAsync(project.ProjectGuid.ToString());
+        reportTypes = await PricingService.GetAllCompanyReportTypesAsync();
+        customer = await PricingService.GetCompanyCustomerAsync(project.CompanyCustomerGuidId.ToString());
+        company = await PricingService.GetCompanyAsync(customer.CompanyId);
+        emailAddress = project?.CustomerEmail ?? string.Empty;
+        emailLogs = (await PricingService.GetProjectEmailLogsAsync(project.ProjectGuid.ToString()))?.OrderByDescending(e => e.TimeSent).ToList() ?? new List<EmailLogDto>();
+
+        // Initialize EditContext for the project
+        editContext = new EditContext(project);
+
+        projectView = $"pricing/projectentrymain/{project.CompanyCustomerGuidId}/{ProjectGuid.ToString()}";
+        isLoaded = true;
+        StateHasChanged();
+    }
+
+    private string GetReportTypeName(int reportTypeId)
+    {
+        return reportTypes.FirstOrDefault(rt => rt.Id == reportTypeId)?.ReportTypeName ?? reportTypeId.ToString();
+    }
+
+    private async Task OnSaveStatus()
+    {
+        if (project is null)
+        {
+            snackbarMessage = "Project not loaded.";
+            await snackbar.Show();
+            return;
+        }
+
+        if (!IsValidEmail(project.CustomerEmail))
+        {
+            snackbarMessage = "Customer email is invalid. Please fix the email before saving.";
+            await snackbar.Show();
+            return;
+        }
+
+        if (selectedStatusId == project.StatusCodeId)
+        {
+            snackbarMessage = "No changes to save.";
+            await snackbar.Show();
+            return;
+        }
+
+        var previousStatusId = project.StatusCodeId;
+        project.StatusCodeId = selectedStatusId;
+
+        // Normalize optional fields to prevent validation errors on empty strings
+        project.NormalizeOptionalFields();
+
+        await PricingService.UpdateCustomerProjectAsync(project);
+        snackbarMessage = "Project status updated successfully.";
+        await snackbar.Show();
+
+        // When project is accepted, notify both customer and company
+        if (selectedStatusId == 2 && previousStatusId != 2)
+        {
+            await SendAcceptanceNotificationsAsync();
+        }
+
+        await StatusChanged.InvokeAsync(selectedStatusId);
+        await ProjectChanged.InvokeAsync(project);
+    }
+
+    /// <summary>
+    /// Sends acceptance notification emails to both the customer and the company.
+    /// </summary>
+    private async Task SendAcceptanceNotificationsAsync()
+    {
+        if (project is null || company is null)
+            return;
+
+        var quoteLink = $"{GetBaseUrl()}/reports/project-quote-report-main/{project.ProjectGuid}";
+        var customerName = customer is not null ? $"{customer.FirstName} {customer.LastName}" : "Customer";
+
+        var customerBody = $@"
+            <p>Dear {customerName},</p>
+            <p>Your project <strong>{project.ProjectName}</strong> has been accepted.</p>
+            <p>You can view your quote here: <a href='{quoteLink}'>{project.ProjectName} Quote</a></p>
+            <p>Best regards,<br/>{company.CompanyName}<br/>O: {company.PhoneNumber}<br/>
+            <a href='http://www.360painting.com/'>www.360painting.com</a></p>";
+
+        var companyBody = $@"
+            <p>Project <strong>{project.ProjectName}</strong> has been accepted by {customerName}.</p>
+            <p>Customer Email: {project.CustomerEmail}</p>
+            <p>Customer Phone: {project.CustomerPhone}</p>
+            <p>Address: {project.Address1}, {project.City}, {project.StateCode} {project.ZipCode}</p>
+            <p>View quote: <a href='{quoteLink}'>{project.ProjectName} Quote</a></p>";
+
+        try
+        {
+            // Send to customer
+            if (!string.IsNullOrWhiteSpace(project.CustomerEmail))
+            {
+                await PricingService.SendProjectEmailAsync(
+                    project.ProjectGuid.ToString(),
+                    $"Project Accepted - {project.ProjectName}",
+                    customerBody,
+                    toAddress: project.CustomerEmail,
+                    senderName: company.CompanyName,
+                    senderEmail: company.Email);
+            }
+
+            // Send to company
+            if (!string.IsNullOrWhiteSpace(company.Email))
+            {
+                await PricingService.SendProjectEmailAsync(
+                    project.ProjectGuid.ToString(),
+                    $"Project Accepted - {project.ProjectName}",
+                    companyBody,
+                    toAddress: company.Email,
+                    senderName: "Quoted Notification",
+                    senderEmail: company.Email);
+            }
+
+            snackbarMessage = "Acceptance emails sent to customer and company.";
+            await snackbar.Show();
+            emailLogs = (await PricingService.GetProjectEmailLogsAsync(project.ProjectGuid.ToString()))?.OrderByDescending(e => e.TimeSent).ToList() ?? new List<EmailLogDto>();
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Status saved but failed to send acceptance emails: {ex.Message}";
+            await snackbar.Show();
+        }
+    }
+
+    private static bool IsValidEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return true; // let API decide if empty is allowed; this avoids “invalid format” errors
+
+        try
+        {
+            _ = new MailAddress(email);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task OnCreateEstimate()
+    {
+        isBusyEbid = true;
+        await loadingIndicator.Show();
+        StateHasChanged();
+        try
+        {
+            if (project == null)
+            {
+                snackbarMessage = "Project not loaded.";
+                await snackbar.Show();
+                return;
+            }
+            await PricingService.CopyCompanyHTMLReportTemplatesToProjectAsync(customer.CompanyId.ToString(), project.ProjectGuid.ToString());
+            project.StatusCodeId = 8;
+            await PricingService.UpdateCustomerProjectAsync(project);
+            snackbarMessage = "eBid created and project status set to eBid.";
+            await snackbar.Show();
+            companyHtmlReports = await PricingService.GetCompanyHTMLReportsByProjectAsync(project.ProjectGuid.ToString());
+            selectedStatusId = project.StatusCodeId;
+        }
+        finally
+        {
+            isBusyEbid = false;
+            await loadingIndicator.Hide();
+            StateHasChanged();
+        }
+    }
+
+    private string GetBaseUrl()
+    {
+#if DEBUG
+        return "https://localhost:7027";
+#else
+        return "https://bludog-software.com/rbp";
+#endif
+    }
+
+    private void OnViewEstimate()
+    {
+        var quoteLink = $"{GetBaseUrl()}/reports/project-quote-report-main/{ProjectGuid.ToString()}";
+        NavigationManager.NavigateTo(quoteLink, true);
+    }
+
+    private void OnEmailProject()
+    {
+        showEmailModal = true;
+    }
+
+    private async Task SendProjectEmail()
+    {
+        if (string.IsNullOrWhiteSpace(emailAddress))
+        {
+            snackbarMessage = "Please enter a valid email address.";
+            await snackbar.Show();
+            return;
+        }
+
+        var quoteLink = $"{GetBaseUrl()}/reports/project-quote-report-main/{ProjectGuid.ToString()}";
+        var emailSubject = $"Project Quote - {project?.ProjectName}";
+
+        var emailBody = $@"
+            <p>Dear {customer.FirstName},</p>
+            <p>Please find your project Estimite at the following link:</p>
+            <p><a href='{quoteLink}'>{quoteLink}</a></p>
+            <table>
+                <tr><td>Best Regards,</td></tr>
+                <tr><td>{company.CompanyName}</td></tr>
+                <tr><td>{company.Email}</td></tr>
+            </table>";
+
+        try
+        {
+            await PricingService.SendProjectEmailAsync(project.ProjectGuid.ToString(), emailSubject, emailBody, emailAddress, "Painting Quote", company.Email);
+            showEmailModal = false;
+            snackbarMessage = "Email sent successfully.";
+            await snackbar.Show();
+            emailLogs = (await PricingService.GetProjectEmailLogsAsync(project.ProjectGuid.ToString()))?.OrderByDescending(e => e.TimeSent).ToList() ?? new List<EmailLogDto>();
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Failed to send email: {ex.Message}";
+            await snackbar.Show();
+        }
+    }
+
+    private async Task OnDeleteEstimate()
+    {
+        if (project == null)
+        {
+            snackbarMessage = "Project not loaded.";
+            await snackbar.Show();
+            return;
+        }
+        await PricingService.DeleteAllCompanyHTMLReportsByProjectAsync(project.ProjectGuid.ToString());
+        snackbarMessage = "All eBid HTML reports for this project have been deleted.";
+        await snackbar.Show();
+        await LoadData();
+        project.StatusCodeId = 1;
+        await PricingService.UpdateCustomerProjectAsync(project);
+        selectedStatusId = project.StatusCodeId;
+        snackbarMessage = "Project status reset to 'New'.";
+        await snackbar.Show();
+    }
+
+    private void EditReport(int reportId, Guid companyGuid)
+    {
+        editingReportId = reportId;
+        editingCompanyGuid = companyGuid;
+        showEditModal = true;
+    }
+
+    private void CloseEditDialog()
+    {
+        editingReportId = null;
+        editingCompanyGuid = null;
+        showEditModal = false;
+    }
+
+    private ProjectEmailSender projectEmailSender;
+
+    private void GoHome()
+    {
+        NavigationManager.NavigateTo("/");
+    }
+
+    private async Task SendEmailFromPopup()
+    {
+        if (projectEmailSender != null)
+        {
+            isSendingEmail = true;
+            StateHasChanged();
+            try
+            {
+                await projectEmailSender.SendAsync();
+                showEmailModal = false;
+                snackbarMessage = "Email sent.";
+                await snackbar.Show();
+                emailLogs = (await PricingService.GetProjectEmailLogsAsync(project.ProjectGuid.ToString()))?.OrderByDescending(e => e.TimeSent).ToList() ?? new List<EmailLogDto>();
+            }
+            catch (Exception ex)
+            {
+                snackbarMessage = $"Failed to send email: {ex.Message}";
+                await snackbar.Show();
+            }
+            finally
+            {
+                isSendingEmail = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SaveProjectModalAsync()
+    {
+        if (project == null)
+            return;
+
+        try
+        {
+            // Normalize optional fields to prevent validation errors on empty strings
+            project.NormalizeOptionalFields();
+
+            await PricingService.UpdateCustomerProjectAsync(project);
+            snackbarMessage = $"Project {project.ProjectName} updated successfully.";
+            await snackbar.Show();
+            editContext = new EditContext(project);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Failed to update project: {ex.Message}";
+            await snackbar.Show();
+        }
+    }
+
+    private async Task HideProjectModalAsync()
+    {
+        EditProjectModalVisible = false;
+        StateHasChanged();
+        await Task.CompletedTask;
+    }
+
+    private void HandleAddressSelected(AddressDetailsDto address)
+    {
+        if (project == null)
+            return;
+
+        project.Address1 = address.Street;
+        project.Address2 = "";
+        project.City = address.City;
+        project.StateCode = address.State;
+        project.ZipCode = address.PostalCode;
+
+        editContext?.Validate();
+        StateHasChanged();
+    }
+
+    private async Task HandleInvalidProjectSubmit()
+    {
+        snackbarMessage = "Please correct the errors in the form.";
+        await snackbar.Show();
+        StateHasChanged();
+    }
+
+    private async Task OnPushToProjectTracker()
+    {
+        if (project is null || company is null)
+        {
+            snackbarMessage = "Project or company data not loaded.";
+            await snackbar.Show();
+            return;
+        }
+
+        isPushingToTracker = true;
+        StateHasChanged();
+
+        try
+        {
+            // Use actual calculated labor and material costs from ProjectCostBreakdown
+            var projectTrack = new
+            {
+                id = 0,
+                name = project.ProjectName ?? "Unnamed Project",
+                painter = "None",
+                startDate = (DateTime?)null,
+                endDate = (DateTime?)null,
+                statusCode = MapStatusCode(project.StatusCodeId),
+                halfDownStatus = 0, // WorkingOnIt
+                orderPaintStatus = 0, // WorkingOnIt
+                paintStatus = 0, // WorkingOnIt
+                totalJob = calculatedGrandTotal,
+                labor = calculatedLaborSubtotal,
+                materials = calculatedMaterialSubtotal,
+                laborPaid = 0m,
+                custPaid = 0m,
+                invoiceStatus = 0, // NotReady
+                invoiceNumber = "",
+                zone = 0, // UpAndComing
+                companyGuid = company.Id
+            };
+
+            var apiUrl = "https://bludog-software.com/rbt/api/projecttracks";
+            //var apiUrl = "https://localhost:7036/api/projecttracks";
+            var response = await HttpClient.PostAsJsonAsync(apiUrl, projectTrack);
+
+            if (response.IsSuccessStatusCode)
+            {
+                snackbarMessage = "Project successfully pushed to Project Tracker!";
+                await snackbar.Show();
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                snackbarMessage = $"Failed to push to Project Tracker: {response.StatusCode} - {errorContent}";
+                await snackbar.Show();
+            }
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Error pushing to Project Tracker: {ex.Message}";
+            await snackbar.Show();
+        }
+        finally
+        {
+            isPushingToTracker = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Handles the callback from ProjectCostBreakdown when costs are calculated.
+    /// </summary>
+    private void HandleCostsCalculated(ProjectCostBreakdown.CostBreakdownResult result)
+    {
+        calculatedLaborSubtotal = result.LaborSubtotal;
+        calculatedMaterialSubtotal = result.MaterialSubtotal;
+        calculatedGrandTotal = result.GrandTotal;
+        // Note: EventCallback automatically triggers re-render, no StateHasChanged() needed
+    }
+
+    /// <summary>
+    /// Maps the project's StatusCodeId to ProjectTrackStatusCode enum value.
+    /// </summary>
+    private static int MapStatusCode(int statusCodeId)
+    {
+        // ProjectTrackStatusCode: New=1, Accepted=2, InProgress=3, OnHold=4, Declined=5, Completed=6, Closed=7, Proposed=8
+        return statusCodeId switch
+        {
+            1 => 1,  // New
+            2 => 2,  // Accepted
+            3 => 3,  // InProgress
+            4 => 4,  // OnHold
+            5 => 5,  // Declined
+            6 => 6,  // Completed
+            7 => 7,  // Closed
+            8 => 8,  // Proposed/eBid
+            _ => 1   // Default to New
+        };
+    }
+
+    private void GoBack()
+    {
+        if (project is null || string.IsNullOrWhiteSpace(ProjectGuid.ToString()))
+        {
+            NavigationManager.NavigateTo("/");
+            return;
+        }
+
+        var url = NavigationManager
+            .ToAbsoluteUri($"pricing/projectentrymain/{project.CompanyCustomerGuidId}/{ProjectGuid.ToString()}")
+            .ToString();
+
+        NavigationManager.NavigateTo(url, forceLoad: true);
+    }
+}

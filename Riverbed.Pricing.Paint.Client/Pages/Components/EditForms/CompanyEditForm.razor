@@ -1,0 +1,216 @@
+@rendermode InteractiveWebAssembly
+@using Radzen
+@using System.Text.Json
+@using Blazorise.LoadingIndicator
+@using System.Linq
+
+<LoadingIndicator Visible="@isUploading" />
+<DxFormLayout>
+    <DxFormLayoutItem Caption="Name" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+            <DxTextBox @bind-Text="@singleCompany.CompanyName" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Address" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.Address1" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Address 2" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.Address2" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="City" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.City" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="State" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.StateCode" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Zip" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.ZipCode" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Phone" ColSpanLg="6" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxTextBox @bind-Text="@singleCompany.PhoneNumber" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Email" ColSpanLg="6" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxTextBox @bind-Text="@singleCompany.Email" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Company Contact" ColSpanLg="6" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxTextBox @bind-Text="@singleCompany.CompanyRepresentativeName" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Logo URL" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxTextBox @bind-Text="@singleCompany.CompanyLogoURL" />
+    </DxFormLayoutItem>
+    <Card Style="margin-top: 15px;">
+        <CardHeader>
+            <Heading Size="HeadingSize.Is5">Company Insurance</Heading>
+        </CardHeader>
+        <CardBody>
+            <DxFormLayoutItem Caption="Insurance PDF" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <div class="mb-2 d-flex align-items-center gap-2">
+                    <RadzenUpload Url="@GetUploadUrl()"
+                                  Accept=".pdf"
+                                  ChooseText="Upload Insurance PDF"
+                                  Auto="true"
+                                  Multiple="false"
+                                  Disabled="@(singleCompany?.Id == Guid.Empty)"
+                                  MaxFileSize="@MaxPdfBytes"
+                                  Change="@OnUploadChanged"
+                                  Progress="@OnUploadProgress"
+                                  Error="@OnUploadError"
+                                  Complete="@OnInsuranceUploadCompleted" />
+                    @if (!string.IsNullOrWhiteSpace(singleCompany?.CompanyInsurancePdfUrl))
+                    {
+                        <a href="@singleCompany.CompanyInsurancePdfUrl" target="_blank" class="ms-2">View</a>
+                    }
+                    @if (isUploading)
+                    {
+                        <DxWaitIndicator Visible="true" />
+                        <span class="text-muted small">Uploading...</span>
+                    }
+                </div>
+
+                @if (isUploading)
+                {
+                    <div class="mt-2 d-flex align-items-center gap-3">
+                        <RadzenProgressBar Value="@progress" Style="width:260px;" />
+                        <span class="text-muted small">@info (@progress%)</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(fileStatus))
+                {
+                    <div class="text-danger small mt-1">@fileStatus</div>
+                }
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Insurance Pdf URL" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <DxTextBox @bind-Text="@singleCompany.CompanyInsurancePdfUrl" />
+            </DxFormLayoutItem>
+        </CardBody>
+    </Card>
+
+</DxFormLayout>
+
+@{
+    if (!isGridEdit)
+    {
+        <p />
+        <DxButton RenderStyle="ButtonRenderStyle.Success" Click="@Save" Enabled="!isSending">
+            <div class="d-flex">
+                <DxWaitIndicator Visible="isSending" />
+                <span class="mx-2">@Message</span>
+            </div>
+        </DxButton>
+    }
+}
+
+@code {
+    [Parameter]
+    public Company singleCompany { get; set; } = new Company();
+    [Parameter]
+    public Func<Company, Task> OnSaveCompany { get; set; }
+    [Parameter]
+    public bool isGridEdit { get; set; } = false;
+    bool isSending = false;
+    string Message => isSending ? "Saving..." : "Save";
+
+    [Inject]
+    private NavigationManager NavigationManager { get; set; }
+
+    private const long MaxPdfBytes = 2L * 1024L * 1024L; // 2 MB
+
+    private bool isUploading = false;
+    private string uploadedInsuranceFileName = string.Empty;
+    private string fileStatus = string.Empty;
+
+    async Task Save()
+    {
+        isSending = true;
+        if (OnSaveCompany != null)
+            await OnSaveCompany(singleCompany);
+        isSending = false;
+    }
+
+    private string GetUploadUrl()
+    {
+        if (singleCompany == null || singleCompany.Id == Guid.Empty) return string.Empty;
+        var baseUri = NavigationManager.BaseUri.TrimEnd('/');
+        return $"{baseUri}/api/FileManager/Upload/{singleCompany.Id}";
+    }
+
+    private void OnUploadChanged(UploadChangeEventArgs args)
+    {
+        fileStatus = string.Empty;
+
+        var file = args?.Files?.FirstOrDefault();
+        if (file != null)
+        {
+            // Defensive client-side size check in addition to MaxFileSize
+            if (file.Size > MaxPdfBytes)
+            {
+                isUploading = false;
+                uploadedInsuranceFileName = string.Empty;
+                fileStatus = $"File '{file.Name}' is too large. Maximum allowed size is 2 MB.";
+                StateHasChanged();
+                return;
+            }
+
+            uploadedInsuranceFileName = file.Name;
+        }
+
+        isUploading = true;
+        StateHasChanged();
+    }
+
+    private void OnUploadProgress(UploadProgressArgs args)
+    {
+        isUploading = true;
+        info = $"{args.Loaded} of {args.Total} bytes";
+        progress = args.Progress;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUploadError(UploadErrorEventArgs args)
+    {
+        // Triggered by Radzen when MaxFileSize is exceeded (or other errors)
+        isUploading = false;
+        progress = 0;
+        info = string.Empty;
+        fileStatus = string.IsNullOrWhiteSpace(args?.Message)
+            ? "Upload failed."
+            : args.Message;
+        StateHasChanged();
+    }
+
+    private async Task OnInsuranceUploadCompleted(UploadCompleteEventArgs args)
+    {
+        try
+        {
+            fileStatus = string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(args.RawResponse))
+            {
+                using var doc = JsonDocument.Parse(args.RawResponse);
+                if (doc.RootElement.TryGetProperty("url", out var urlProp))
+                {
+                    var url = urlProp.GetString();
+                    if (!string.IsNullOrWhiteSpace(url))
+                    {
+                        singleCompany.CompanyInsurancePdfUrl = url;
+                        if (OnSaveCompany != null)
+                        {
+                            await OnSaveCompany(singleCompany);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            fileStatus = "An error occurred while processing the uploaded file.";
+        }
+        finally
+        {
+            isUploading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    string info = string.Empty;
+    int progress = 0;
+}

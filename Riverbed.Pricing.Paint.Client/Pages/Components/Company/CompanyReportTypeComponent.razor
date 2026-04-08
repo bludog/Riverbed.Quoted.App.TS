@@ -1,0 +1,105 @@
+@page "/companytypes"
+
+@inject HttpClient Http
+@inject ILogger<CompanyReportTypeComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<h3>Report Types</h3>
+<LoadingIndicator @bind-Visible="@isBusy">
+    <DxGrid Data="@reportTypes"
+            EditModelSaving="@Grid_EditModelSaving"
+            CustomizeEditModel="@Grid_CustomizeEditModel"
+            DataItemDeleting="@Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="ReportTypeName" Caption="Report Type Name" />
+            <DxGridDataColumn FieldName="ReportTypeDescription" Caption="Description" />
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var newReportType = (CompanyReportType)EditFormContext.EditModel;
+            }
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Report Type Name" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="@newReportType.ReportTypeName" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Description" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                    <DxTextBox @bind-Text="@newReportType.ReportTypeDescription" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </EditFormTemplate>
+    </DxGrid> 
+</LoadingIndicator>
+
+@code {
+    public CompanyReportType reportType { get; set; } = new CompanyReportType();
+    public bool isBusy { get; set; } = false;
+    public List<CompanyReportType> reportTypes { get; set; }
+    private IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.IsNew)
+        {
+            var newReportType = new CompanyReportType
+            {
+                Id = 0,
+                ReportTypeName = "",
+                ReportTypeDescription = ""
+            };
+
+            e.EditModel = newReportType;
+        }
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        var reportType = (CompanyReportType)e.EditModel;
+        
+        if (e.IsNew)
+        {
+            await pricingService.CreateCompanyReportTypeAsync(reportType);
+        }
+        else
+        {
+            await pricingService.UpdateCompanyReportTypeAsync(reportType);
+        }
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        await pricingService.DeleteCompanyReportTypeAsync(((CompanyReportType)e.DataItem).Id);
+        await UpdateDataAsync();
+    }
+
+    async Task UpdateDataAsync()
+    {
+        isBusy = true;
+        reportTypes = await pricingService.GetAllCompanyReportTypesAsync();
+        StateHasChanged();
+        isBusy = false;
+    }
+}

@@ -1,0 +1,139 @@
+﻿@page "/paintable-item-categories"
+@inject IPricingService PricingService
+@inject ILogger<PaintableItemCategory> Logger
+@inject IToastService ToastService
+
+<h3>Paintable Item Categories</h3>
+
+<ErrorBoundary>
+    <ChildContent>
+        <LoadingIndicator @bind-Visible="isLoading">
+            <DxGrid @ref="MyGrid"
+                    Data="@CategoryItems"
+                    ShowFilterRow="true"
+                    ShowGroupPanel="true"
+                    EditMode="GridEditMode.PopupEditForm"
+                    KeyFieldName="Id"
+                    ShowAllRows="true"
+                    PageSize="10"
+                    EditModelSaving="OnRowInserting"
+                    DataItemDeleting="OnRowRemoving"
+                    CustomizeEditModel="InitNewRow">
+                <Columns>
+                    <DxGridDataColumn FieldName="Id" Caption="ID" ReadOnly="true" Width="80px" />
+                    <DxGridDataColumn FieldName="Name" Caption="Name" />
+                    <DxGridDataColumn FieldName="Description" Caption="Description" />
+                    <DxGridCommandColumn Width="60px">
+                        <HeaderTemplate>
+                            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                        </HeaderTemplate>
+                        <CellDisplayTemplate>
+                            @{
+                                <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                                <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+                <EditFormTemplate Context="EditFormContext">
+                    @{
+                        var item = (PaintableItemCategory)EditFormContext.EditModel;
+                    }
+                    <DxFormLayout CssClass="w-100">                        
+                        <DxFormLayoutItem Caption="Name" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox @bind-Text="@item.Name" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Description" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox @bind-Text="@item.Description" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>                    
+                </EditFormTemplate>
+            </DxGrid>
+        </LoadingIndicator>
+    </ChildContent>
+    <ErrorContent Context="ex">
+        <Alert Color="Color.Danger">
+            <AlertMessage>Error loading grid</AlertMessage>
+            <AlertDescription>@ex.Message</AlertDescription>
+        </Alert>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    private List<PaintableItemCategory> CategoryItems = new();
+    public IGrid MyGrid { get; set; }
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            CategoryItems = (await PricingService.GetAllPaintableItemCategoriesAsync()).ToList();
+            Logger.LogInformation("Loaded {Count} categories", CategoryItems.Count);
+            await ToastService.Success("Data loaded successfully", "Success");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load categories");
+            await ToastService.Error("Failed to load categories", "Error");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void InitNewRow(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.IsNew)
+        {
+            var newItem = (PaintableItemCategory)e.EditModel;
+            newItem.Name = string.Empty;
+            newItem.Description = string.Empty;
+        }
+    }
+
+    private async Task OnRowInserting(GridEditModelSavingEventArgs e)
+    {
+        try
+        {
+            if (e.IsNew)
+            {
+                await PricingService.CreatePaintableItemCategoryAsync(e.EditModel as PaintableItemCategory);
+                await ToastService.Success("Item Added", "Success");
+            }
+            else
+            {
+                await PricingService.UpdatePaintableItemCategoryAsync(e.EditModel as PaintableItemCategory);
+                await ToastService.Success("Item Updated", "Success");
+            }           
+            
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to add item");
+            await ToastService.Error("Failed to add item", "Error");
+        }
+    }
+     
+
+    private async Task OnRowRemoving(GridDataItemDeletingEventArgs e)
+    {
+        var item = e.DataItem as PaintableItemCategory;
+        try
+        {
+            await PricingService.DeletePaintableItemCategoryAsync(item.Id);
+            await ToastService.Success("Item deleted", "Success");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete item");
+            await ToastService.Error("Failed to delete item", "Error");
+        }
+    }
+}

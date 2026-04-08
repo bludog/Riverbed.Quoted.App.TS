@@ -1,0 +1,290 @@
+@page "/project-email/{ProjectGuid}"
+@using Blazorise
+@using Blazorise.Snackbar
+@using Radzen
+@using Radzen.Blazor
+@using Riverbed.Pricing.Paint.Shared.Entities.Reporting
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Reporting
+
+@inherits ComponentBase
+
+@attribute [Authorize]
+
+@inject IPricingService PricingService
+@inject NavigationManager Navigation
+@inject ILogger<ProjectEmailSender> Logger
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Send Project Email</PageTitle>
+
+
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (loadError)
+{
+    <div class="alert alert-warning" role="alert">
+        Failed to load project/customer information.
+    </div>
+}
+else
+{
+    <LoadingIndicator Visible="@sending">
+        <Card Class="shadow-sm">      
+            <CardBody>
+                <Fields>
+                    <Field Horizontal ColumnSize="ColumnSize.Is12">
+                        <FieldLabel ColumnSize="ColumnSize.Is2" >Reply To</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is10">
+                            <TextEdit @bind-Text="replyToEmail" Placeholder="replyto@email.com" />
+                            <FieldHelp>User replies to this Email</FieldHelp>
+                        </FieldBody>
+                    </Field>
+                    <Field Horizontal ColumnSize="ColumnSize.Is12">
+                        <FieldLabel ColumnSize="ColumnSize.Is2">To</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is10">
+                            <TextEdit @bind-Text="toEmail" Placeholder="customer@email.com" />
+                        </FieldBody>
+                    </Field>
+                    <Field Horizontal ColumnSize="ColumnSize.Is12">
+                        <FieldLabel ColumnSize="ColumnSize.Is2">Cc</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is10">
+                            <TextEdit @bind-Text="ccEmail" Placeholder="cc1@email.com; cc2@email.com" />
+                        </FieldBody>
+                    </Field>
+                    <Field Horizontal ColumnSize="ColumnSize.Is12">
+                        <FieldLabel ColumnSize="ColumnSize.Is2">Bcc</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is10">
+                            <TextEdit @bind-Text="bccEmail" Placeholder="bcc1@email.com; bcc2@email.com" />
+                        </FieldBody>
+                    </Field>
+                    <Field Horizontal ColumnSize="ColumnSize.Is12">
+                        <FieldLabel ColumnSize="ColumnSize.Is2">Subject</FieldLabel>
+                        <FieldBody ColumnSize="ColumnSize.Is10">
+                            <TextEdit @bind-Text="subject" Placeholder="Subject" />
+                        </FieldBody>
+                    </Field>
+                    <Field ColumnSize="ColumnSize.Is12">
+                        <RadzenHtmlEditor Style="height:500px" @bind-Value="bodyHtml" Mode="HtmlEditorMode.Design" />
+                    </Field>
+                    <Field>
+                        <FieldLabel>Template</FieldLabel>
+                        <Select TValue="int?" SelectedValue="@selectedTemplateId" SelectedValueChanged="OnTemplateChanged">
+                            <SelectItem Value="@( (int?)null )"></SelectItem>
+                            @foreach (var t in templates)
+                            {
+                                <SelectItem Value="@t.Id">@t.ReportName</SelectItem>
+                            }
+                        </Select>
+                    </Field>
+                </Fields>
+            </CardBody>
+            @if (ShowActions)
+            {
+                <CardFooter>
+                    <div class="d-flex gap-2">
+                        <Button Color="Color.Primary" Disabled="@sending" Clicked="SendAsync">
+                            @(sending ? (MarkupString)"<span class='spinner-border spinner-border-sm me-1'></span>Sending..." : (MarkupString)"<span class='bi bi-send me-1'></span>Send")
+                        </Button>
+                        <Button Color="Color.Secondary" Disabled="@sending" Clicked="ResetEditor">Reset</Button>
+                    </div>
+                </CardFooter>
+            }
+        </Card>
+    </LoadingIndicator>
+
+    <Snackbar @ref="snackbar" Color="@snackbarColor" Location="SnackbarLocation.Bottom">
+        <SnackbarBody>@snackbarMessage</SnackbarBody>
+    </Snackbar>
+}
+
+@code {
+    [Parameter] public string ProjectGuid { get; set; } = string.Empty;
+    [Parameter] public bool ShowActions { get; set; } = false;
+
+    private bool isLoading = true;
+    private bool loadError = false;
+    private bool sending = false;
+
+    private string replyToEmail = string.Empty;
+    private string toEmail = string.Empty;
+    private string ccEmail = string.Empty;
+	private string bccEmail = string.Empty;
+    private string subject = string.Empty;
+    private string bodyHtml = string.Empty;
+
+    private List<CompanyHTMLReportTemplate> templates = new();
+    private int? selectedTemplateId = null;
+    private int? selectedReportTypeId = null;
+
+    private Snackbar? snackbar;
+    private string snackbarMessage = string.Empty;
+    private SnackbarColor snackbarColor = SnackbarColor.Primary;
+
+    private string companyGuid = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            if (string.IsNullOrWhiteSpace(ProjectGuid) || !Guid.TryParse(ProjectGuid, out var projectGuid))
+            {
+                loadError = true;
+                return;
+            }
+
+            // Load project
+            var project = await PricingService.GetCustomerProjectAsync(ProjectGuid);
+            if (project is null)
+            {
+                loadError = true;
+                return;
+            }
+
+            // Load customer and company
+            var customer = await PricingService.GetCompanyCustomerAsync(project.CompanyCustomerGuidId.ToString());
+            if (customer is null)
+            {
+                loadError = true;
+                return;
+            }
+            var company = await PricingService.GetCompanyAsync(customer.CompanyId);
+            companyGuid = company.Id.ToString();
+            replyToEmail = company.Email ?? string.Empty;
+			bccEmail = company.Email ?? string.Empty;
+
+            // Prefill email
+            toEmail = string.IsNullOrWhiteSpace(project.CustomerEmail) ? (customer.Email ?? string.Empty) : project.CustomerEmail;
+            subject = $"{project.ProjectName} Proposal";
+
+            // Load active, non-global templates for this company
+            var allTemplates = await PricingService.GetCompanyHTMLReportTemplatesByCompanyAsync(company.Id.ToString())
+                               ?? new List<CompanyHTMLReportTemplate>();
+            templates = allTemplates
+                .Where(t => t.IsActive && !t.IsGlobalTemplate)
+                .OrderBy(t => t.DisplayOrder)
+                .ToList();
+
+            // Leave initial selection empty
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed loading ProjectEmailSender data");
+            loadError = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyTemplate(CompanyHTMLReportTemplate template)
+    {
+        // Basic replacements; extend as needed
+        bodyHtml = template.ReportHTMLText ?? string.Empty;
+        selectedReportTypeId = template.ReportTypeId;
+    }
+
+    private Task OnTemplateChanged(int? id)
+    {
+        selectedTemplateId = id;
+        if (id is int value)
+        {
+            var t = templates.FirstOrDefault(x => x.Id == value);
+            if (t != null)
+            {
+                ApplyTemplate(t);
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    private static bool ContainsTokens(string? html)
+        => !string.IsNullOrWhiteSpace(html) && ProjectTemplateTokens.All.Any(tok => html.Contains(tok, StringComparison.OrdinalIgnoreCase));
+
+    private async Task<string> PopulateTokensIfNeededAsync(string html)
+    {
+        if (!ContainsTokens(html)) return html;
+        if (string.IsNullOrWhiteSpace(companyGuid) || string.IsNullOrWhiteSpace(ProjectGuid)) return html;
+        try
+        {
+            var merged = await PricingService.MergeHtmlAsync(companyGuid, ProjectGuid, html);
+            return string.IsNullOrWhiteSpace(merged) ? html : merged;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Token merge failed for company {CompanyGuid} project {ProjectGuid}", companyGuid, ProjectGuid);
+            await ShowSnack("Warning: Could not populate tokens. Sending original content.", SnackbarColor.Warning);
+            return html;
+        }
+    }
+
+    public async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(toEmail))
+        {
+            await ShowSnack("Please enter a destination email.", SnackbarColor.Danger);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            await ShowSnack("Please enter a subject.", SnackbarColor.Danger);
+            return;
+        }
+        try
+        {
+            sending = true;
+
+            // Populate tokens if present before sending
+            var htmlToSend = await PopulateTokensIfNeededAsync(bodyHtml);
+            bodyHtml = htmlToSend; // reflect populated content in the editor
+
+            // Note: The current Email API supports CC but not Reply-To.
+            // If Reply-To support is added server-side, include it there.
+            //await PricingService.SendEmailAsync(toEmail, subject, htmlToSend, "Painting Update", senderEmail: replyToEmail, ccEmail, true);
+            await PricingService.SendProjectEmailAsync(ProjectGuid, subject, htmlToSend, toEmail, "Painting Quote", replyToEmail, ccEmail, bccEmail, true, selectedReportTypeId);
+
+            await ShowSnack($"Email sent to {toEmail}.", SnackbarColor.Success);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Email send failed");
+            await ShowSnack($"Failed to send email: {ex.Message}", SnackbarColor.Danger);
+        }
+        finally
+        {
+            sending = false;
+        }
+    }
+
+    private void ResetEditor()
+    {
+        bodyHtml = string.Empty;
+        subject = string.Empty;
+        // keep email fields as-is
+    }
+
+    private async Task ShowSnack(string message, SnackbarColor color)
+    {
+        snackbarMessage = message;
+        snackbarColor = color;
+        if (snackbar != null)
+        {
+            await snackbar.Show();
+        }
+    }
+
+    private Task GoBack()
+    {
+        Navigation.NavigateTo($"/reports/project-quote-report-main/{ProjectGuid}");
+        return Task.CompletedTask;
+    }
+}

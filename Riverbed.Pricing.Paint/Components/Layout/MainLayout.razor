@@ -1,0 +1,32 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@using Blazorise
+@inherits LayoutComponentBase
+
+<Blazorise.MessageProvider />
+<Blazorise.PageProgressProvider />
+
+<Layout Sider>
+    <LayoutSider Class="d-none d-md-flex">
+        <LayoutSiderContent>
+            <NavMenu />
+        </LayoutSiderContent>
+    </LayoutSider>
+
+    <Layout>
+        @* Mobile header + offcanvas (interactive island) *@
+        <MobileShell />
+
+        <LayoutContent>
+            <article class="content px-4">
+                @Body
+            </article>
+        </LayoutContent>
+    </Layout>
+</Layout>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

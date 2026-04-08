@@ -1,0 +1,176 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Headers
+@inject HttpClient Http
+@inject IJSRuntime JSRuntime
+
+<div class="room-image-upload">
+    @if (IsUploading)
+    {
+        <div class="text-center">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Uploading...</span>
+            </div>
+            <span class="ms-2">Uploading image...</span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(ImageUrl))
+    {
+        <div class="d-flex align-items-center gap-2">
+            <img src="@ImageUrl" alt="Room" class="room-image-preview" />
+            <Button Size="Size.Small" Color="Color.Danger" Clicked="DeleteImageAsync">
+                <Icon Name="IconName.Delete" /> Delete
+            </Button>
+        </div>
+    }
+    else
+    {
+        <InputFile OnChange="HandleFileSelected" accept="image/*" class="form-control form-control-sm" />
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="text-danger mt-1 small">@ErrorMessage</div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public int RoomId { get; set; }
+    [Parameter] public EventCallback OnImageChanged { get; set; }
+
+    private string? ImageUrl { get; set; }
+    private bool IsUploading { get; set; }
+    private string? ErrorMessage { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadImageInfo();
+    }
+
+    private async Task LoadImageInfo()
+    {
+        try
+        {
+            var response = await Http.GetAsync($"api/RoomImage/Info/{RoomId}");
+            if (response.IsSuccessStatusCode)
+            {
+                var info = await response.Content.ReadFromJsonAsync<RoomImageInfo>();
+                if (info?.HasImage == true)
+                {
+                    ImageUrl = info.ThumbnailUrl;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading image info: {ex.Message}");
+        }
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        ErrorMessage = null;
+        var file = e.File;
+
+        if (file == null)
+            return;
+
+        // Validate file size (max 10MB)
+        if (file.Size > 10 * 1024 * 1024)
+        {
+            ErrorMessage = "File size must be less than 10MB";
+            return;
+        }
+
+        // Validate file type
+        if (!file.ContentType.StartsWith("image/"))
+        {
+            ErrorMessage = "Please select an image file";
+            return;
+        }
+
+        IsUploading = true;
+        StateHasChanged();
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var fileContent = new StreamContent(file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024));
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+
+            var response = await Http.PostAsync($"api/RoomImage/Upload/{RoomId}", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<UploadResult>();
+                if (result != null)
+                {
+                    ImageUrl = result.ThumbnailUrl;
+                    await OnImageChanged.InvokeAsync();
+                }
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ErrorMessage = $"Upload failed: {error}";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteImageAsync()
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"api/RoomImage/Delete/{RoomId}");
+            if (response.IsSuccessStatusCode)
+            {
+                ImageUrl = null;
+                await OnImageChanged.InvokeAsync();
+            }
+            else
+            {
+                ErrorMessage = "Failed to delete image";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private class RoomImageInfo
+    {
+        public bool HasImage { get; set; }
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+    }
+
+    private class UploadResult
+    {
+        public int Id { get; set; }
+        public string? Url { get; set; }
+        public string? ThumbnailUrl { get; set; }
+    }
+}
+
+<style>
+    .room-image-upload {
+        margin: 0.5rem 0;
+    }
+
+    .room-image-preview {
+        max-width: 100px;
+        max-height: 100px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+</style>

@@ -1,0 +1,190 @@
+@using DevExpress.Blazor
+@using Riverbed.Pricing.Paint.Shared.Data
+
+<DxPopup @bind-Visible="@Visible" 
+         HeaderText="Edit Project" 
+         ShowFooter="true" 
+         Width="800px" 
+         MaxWidth="95vw" 
+         MaxHeight="90vh" 
+         SizeMode="SizeMode.Large">
+    <BodyContentTemplate Context="popupContext">
+        <EditForm EditContext="@EditContext" OnValidSubmit="OnSaveAsync" OnInvalidSubmit="@OnInvalidSubmitAsync">
+            <ChildContent Context="formContext">
+                <DataAnnotationsValidator />
+                <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Project Name" ColSpanMd="12">
+                        <DxTextBox @bind-Text="@Project.ProjectName" ShowValidationIcon="true" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Email" ColSpanMd="12">
+                        <DxTextBox NullText="Email Address" ShowValidationIcon="true" @bind-Text="@Project.CustomerEmail" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Phone Number" ColSpanMd="12">
+                        <DxTextBox NullText="123-456-7890" Mask="000-000-0000" @bind-Text="@Project.CustomerPhone" ShowValidationIcon="true" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="CC Email" ColSpanMd="12">
+                        <DxTextBox NullText="CC Email Address (Optional)" ShowValidationIcon="true" @bind-Text="@Project.SecondaryCcEmail" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Alternate Phone" ColSpanMd="12">
+                        <DxTextBox NullText="123-456-7890 (Optional)" Mask="000-000-0000" @bind-Text="@Project.SecondaryPhoneNumber" ShowValidationIcon="true" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Summary" ColSpanMd="12">
+                        <DxMemo @bind-Text="@Project.Summary" ShowValidationIcon="true" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Address" ColSpanMd="12">
+                        <GoogleAddressAutocomplete OnAddressSelected="@HandleAddressSelected" SearchText="@GetFullAddress()"/>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Show Address" ColSpanMd="12">
+                        <DxCheckBox @bind-Checked="@ShowAddressFields">
+                            Show Address
+                        </DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutGroup Caption="Address Details" Visible="@ShowAddressFields">
+                        <DxFormLayoutItem Caption="Address Line 1" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox NullText="Address Line 1" @bind-Text="@Project.Address1" ShowValidationIcon="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Address Line 2" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox NullText="Address Line 2" @bind-Text="@Project.Address2" ShowValidationIcon="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="City" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox NullText="City Name" @bind-Text="@Project.City" ShowValidationIcon="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="State" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12">
+                            <DxTextBox NullText="State Code" @bind-Text="@Project.StateCode" ShowValidationIcon="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Zip" ColSpanLg="6" ColSpanMd="6" ColSpanSm="12" BeginRow="true">
+                            <DxTextBox NullText="Zip Code" Mask="00000" @bind-Text="@Project.ZipCode" ShowValidationIcon="true" />
+                        </DxFormLayoutItem>
+                    </DxFormLayoutGroup>
+                    @if (ShowCopyProjectOption)
+                    {
+                        <DxFormLayoutItem Caption="Copy Another Project" ColSpanMd="12">
+                            <DxCheckBox @bind-Checked="@CopyAnotherProjectSelected">
+                                Copy Another Project (@AllCustomers.Count customers available)
+                            </DxCheckBox>
+                        </DxFormLayoutItem>
+                        @if (CopyAnotherProjectSelected)
+                        {
+                            <DxFormLayoutGroup Caption="Copy Project" Visible="@CopyAnotherProjectSelected">
+                                <DxFormLayoutItem Caption="Select Customer:" ColSpanMd="12">
+                                    <DxComboBox Data="@AllCustomers"
+                                                TextFieldName="FirstName"
+                                                ValueFieldName="Id"
+                                                @bind-Value="@SelectedCopyCustomerId"
+                                                NullText="Select Customer">
+                                        <ItemTemplate Context="customer">
+                                            @customer.FirstName @customer.LastName
+                                        </ItemTemplate>
+                                    </DxComboBox>
+                                </DxFormLayoutItem>
+                                @if (SelectedCopyCustomerId != 0 && CustomerProjectsDict.ContainsKey(SelectedCopyCustomerId))
+                                {
+                                    <DxFormLayoutItem Caption="Select Project:" ColSpanMd="12">
+                                        <DxComboBox Data="@CustomerProjectsDict[SelectedCopyCustomerId]"
+                                                    TextFieldName="ProjectName"
+                                                    ValueFieldName="ProjectGuid"
+                                                    @bind-Value="@SelectedCopyProjectGuid"
+                                                    NullText="Select Project">
+                                            <ItemTemplate Context="project">
+                                                @project.ProjectName
+                                            </ItemTemplate>
+                                        </DxComboBox>
+                                    </DxFormLayoutItem>
+                                }
+                            </DxFormLayoutGroup>
+                        }
+                    }
+                    <DxFormLayoutItem>
+                        <DxButton SubmitFormOnClick="true" Text="Submit" />
+                        <DxButton RenderStyle="ButtonRenderStyle.Secondary" Click="@OnCancelAsync" Text="Cancel" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </ChildContent>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter]
+    public bool Visible { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> VisibleChanged { get; set; }
+
+    [Parameter]
+    public ProjectData Project { get; set; } = new ProjectData();
+
+    [Parameter]
+    public EditContext EditContext { get; set; }
+
+    [Parameter]
+    public List<CompanyCustomer> AllCustomers { get; set; } = new();
+
+    [Parameter]
+    public Dictionary<int, List<ProjectData>> CustomerProjectsDict { get; set; } = new();
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public EventCallback<AddressDetailsDto> OnAddressSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnInvalidSubmit { get; set; }
+
+    [Parameter]
+    public bool ShowCopyProjectOption { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<bool> OnCopyProjectChecked { get; set; }
+
+    [Parameter]
+    public EventCallback<int> OnCustomerSelected { get; set; }
+
+    public bool ShowAddressFields { get; set; }
+    public bool CopyAnotherProjectSelected { get; set; }
+    public int SelectedCopyCustomerId { get; set; }
+    public Guid SelectedCopyProjectGuid { get; set; }
+
+    private async Task OnSaveAsync()
+    {
+        await OnSave.InvokeAsync();
+        Visible = false;
+        await VisibleChanged.InvokeAsync(false);
+    }
+
+    private async Task OnCancelAsync()
+    {
+        await OnCancel.InvokeAsync();
+        Visible = false;
+        await VisibleChanged.InvokeAsync(false);
+    }
+
+    private async Task OnInvalidSubmitAsync()
+    {
+        await OnInvalidSubmit.InvokeAsync();
+    }
+
+    private async Task HandleAddressSelected(AddressDetailsDto address)
+    {
+        await OnAddressSelected.InvokeAsync(address);
+    }
+
+    private string GetFullAddress()
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Project.Address1))
+            parts.Add(Project.Address1);
+        if (!string.IsNullOrWhiteSpace(Project.City))
+            parts.Add(Project.City);
+        if (!string.IsNullOrWhiteSpace(Project.StateCode))
+            parts.Add(Project.StateCode);
+        if (!string.IsNullOrWhiteSpace(Project.ZipCode))
+            parts.Add(Project.ZipCode);
+        return string.Join(", ", parts);
+    }
+}

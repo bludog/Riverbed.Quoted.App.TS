@@ -1,0 +1,114 @@
+@inject HttpClient Http
+@inject ILogger<PricingInteriorDefaultsComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    @{
+        if (CompanyGuid != null)
+        {
+            <h3>Company Interior Pricing</h3>
+            <PricingInteriorDefaultsEditForm companyInteriorDefaults="@interiorPricingDefaults" OnSaveInteriorDefaults="@SaveInteriorDefaults" />
+        }
+        else
+        {
+            <DxGrid Data="@interiorPricingDefaultss"
+                    EditModelSaving="Grid_EditModelSaving"
+                    DataItemDeleting="Grid_DataItemDeleting"
+                    EditMode="GridEditMode.PopupEditForm"
+                    @ref="MyGrid">
+                <Columns>
+                    <DxGridDataColumn FieldName="WallRatePerSquareFoot" Caption="Wall Per SqFt" />
+                    <DxGridDataColumn FieldName="CeilingRatePerSquareFoot" Caption="Ceilings Per SqFt" />
+                    <DxGridDataColumn FieldName="BaseboardRatePerLinearFoot" Caption="Baseboards LnFt" />
+                    <DxGridDataColumn FieldName="CrownMoldingRatePerLinearFoot" Caption="Crown Per LnFt" />
+                    <DxGridDataColumn FieldName="DoorRateEach" Caption="Door Per Side" />
+                    <DxGridDataColumn FieldName="PaintCoats" Caption="Paint Coats" />
+                    <DxGridDataColumn FieldName="PaintCoveragePerGallon" Caption="Coverage Per Gal" />
+                    <DxGridCommandColumn Width="60px">
+                        <HeaderTemplate>
+                            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                        </HeaderTemplate>
+                        <CellDisplayTemplate>
+                            @{
+                                <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                                <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+
+                </Columns>
+
+                <EditFormTemplate Context="EditFormContext">
+                    @{
+                        var newPricingDefaults = (PricingInteriorDefault)EditFormContext.EditModel;
+                    }
+                    <PricingInteriorDefaultsEditForm companyDefaults="@newPricingDefaults" isGridEdit="true" OnSaveInteriorDefaults="@SaveInteriorDefaults" />
+                </EditFormTemplate>
+
+            </DxGrid>
+        }
+    }
+</LoadingIndicator>
+
+
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; } = null;
+    public PricingInteriorDefault interiorPricingDefaults { get; set; } = new PricingInteriorDefault();
+    public List<PricingInteriorDefault> interiorPricingDefaultss { get; set; }
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        await UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var interiorPricingDefaults = (PricingInteriorDefault)args.EditModel;
+        await SaveInteriorDefaults(interiorPricingDefaults);
+    }
+
+    async Task SaveInteriorDefaults(PricingInteriorDefault companydefaults)
+    {
+        if (companydefaults.Id == 0)
+        {
+            await pricingService.CreatePricingInteriorDefaultAsync(companydefaults);
+        }
+        else
+        {
+            await pricingService.UpdatePricingInteriorDefaultAsync(companydefaults);
+        }
+        await UpdateData();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        await pricingService.DeletePricingInteriorDefaultAsync(((PricingInteriorDefault)args.DataItem).CompanyId.ToString());
+        await UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        if (CompanyGuid != null)
+        {
+            interiorPricingDefaults = await pricingService.GetPricingInteriorDefaultAsync(CompanyGuid);
+            //companydefaultss = new List<CompanyDefaults> { company };
+        }
+        else
+        {
+            interiorPricingDefaultss = await pricingService.GetAllPricingInteriorDefaultsAsync();
+        }
+               
+        isBusy = false;
+        StateHasChanged();
+    }
+}

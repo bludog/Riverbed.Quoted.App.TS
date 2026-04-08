@@ -1,0 +1,244 @@
+@page "/companypaintableitemcomponent"
+
+@inject HttpClient Http
+@inject ILogger<CompanyPaintableItemComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    @{
+        // if (CompanyGuid != null)
+        // {
+        //     <h3>Company Paintable Items</h3>
+        //     <CompanyPaintableItemEditForm singleCompanyPaintableItem="@companypaintableitems" OnSaveCompanyPaintableItem="@SaveModel"  />
+
+        // }
+        // else
+        // {
+            <h3>Company Paintable Items</h3>
+            <DxGrid Data="@companyPaintableItem"
+                    EditModelSaving="Grid_EditModelSaving"
+                    DataItemDeleting="Grid_DataItemDeleting"
+                    CustomizeEditModel="Grid_CustomizeEditModel"
+                    SelectionMode="GridSelectionMode.Single"
+                    EditMode="GridEditMode.PopupEditForm"
+                    @ref="MyGrid">
+                <Columns>
+                    <DxGridDataColumn FieldName="Name" Caption="Name" />
+                    <DxGridDataColumn FieldName="Description" Caption="Description" />
+                    <DxGridDataColumn FieldName="Price" Caption="Cost" Width="60px"/>
+                    <DxGridDataColumn FieldName="SquareFootage" Caption="SqFt" Width="60px"/>
+                    <DxGridDataColumn FieldName="BaseTime" Caption="Time Per SqFt" Width="120px"/>
+                    <DxGridDataColumn FieldName="PaintTypeId" Caption="Paint">
+                        <CellDisplayTemplate>
+                        @{
+                            var paintTypeId = ((CompanyPaintableItem)context.DataItem).PaintTypeId;
+                            var paintType = paintTypes.FirstOrDefault(x => x.Id == paintTypeId);
+                            if (paintType != null)
+                            {
+                                            <span>@paintType.PaintTypeName</span>
+                            }
+                        }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PricingTypeId" Caption="Pricing">
+                        <CellDisplayTemplate>
+                        @{
+                            var pricingTypeId = ((CompanyPaintableItem)context.DataItem).PricingTypeId;
+                            var pricingType = pricingTypes.FirstOrDefault(x => x.Id == pricingTypeId);
+                            if (pricingType != null)
+                            {
+                                            <span>@pricingType.PricingTypeName</span>
+                            }
+                        }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintableItemCategoryId" Caption="Category">
+                        <CellDisplayTemplate>
+                        @{
+                            var categoryId = ((CompanyPaintableItem)context.DataItem).PaintableItemCategoryId;
+                            var category = paintableItemCategories.FirstOrDefault(x => x.Id == categoryId);
+                            if (category != null)
+                            {
+                                            <span>@category.Name</span>
+                            }
+                        }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridCommandColumn Width="160px" />
+                </Columns>
+
+                <EditFormTemplate Context="EditFormContext">
+                @{
+                    var newCompanyPaintableItem = (CompanyPaintableItem)EditFormContext.EditModel;
+                    Logger.LogInformation($"EditFormContext: {newCompanyPaintableItem.Id}");
+                    newCompanyPaintableItem.CompanyId = Guid.Parse(CompanyGuid);
+                }
+                    <DxFormLayout>
+                        <DxFormLayoutItem Caption="Name" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxTextBox @bind-Text="@newCompanyPaintableItem.Name" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Description" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxTextBox @bind-Text="@newCompanyPaintableItem.Description" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Price" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxSpinEdit @bind-Value="@newCompanyPaintableItem.Price" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="SqFt" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxSpinEdit @bind-Value="@newCompanyPaintableItem.SquareFootage" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Time" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxSpinEdit @bind-Value="@newCompanyPaintableItem.BaseTime" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Paint" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxComboBox Data="@paintTypes"
+                                        TextFieldName="@nameof(PaintType.PaintTypeName)"
+                                        ValueFieldName="@nameof(PaintType.Id)"
+                                        @bind-Value="@newCompanyPaintableItem.PaintTypeId" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Pricing" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxComboBox Data="@pricingTypes"
+                                        TextFieldName="@nameof(PricingType.PricingTypeName)"
+                                        ValueFieldName="@nameof(PricingType.Id)"
+                                        @bind-Value="@newCompanyPaintableItem.PricingTypeId" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Category" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                            <DxComboBox Data="@paintableItemCategories"
+                                        TextFieldName="@nameof(PaintableItemCategory.Name)"
+                                        ValueFieldName="@nameof(PaintableItemCategory.Id)"
+                                        @bind-Value="@newCompanyPaintableItem.PaintableItemCategoryId" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                </EditFormTemplate>
+
+            </DxGrid>
+
+        // }
+    }
+</LoadingIndicator>
+
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; } = null;
+    public List<CompanyPaintableItem> companyPaintableItem { get; set; }
+    public CompanyPaintableItem companypaintableitems { get; set; } = new CompanyPaintableItem();
+    public List<PaintableItemCategory> paintableItemCategories { get; set; } = new List<PaintableItemCategory>();
+    public List<PaintType> paintTypes { get; set; }
+    public List<PricingType> pricingTypes { get; set; }
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+    public bool IsSaveDisabled { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await UpdateData();
+    }
+
+    // async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    // {
+    //     var companypaintableitems = (CompanyPaintableItem)args.EditModel;
+    //     await SaveModel(companypaintableitems);
+    // }
+
+    // async Task SaveCompanySettings(CompanyPaintableItem companypaintableitems)
+    // {
+    //     if (companypaintableitems.Id == 0)
+    //     {
+    //         await pricingService.CreateCompanySettingsAsync(companypaintableitems);
+    //     }
+    //     else
+    //     {
+    //         await pricingService.UpdateCompanySettingsAsync(companypaintableitems);
+    //     }
+    //     UpdateData();
+    // }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs args)
+    {
+        if (args.IsNew)
+        {
+            var companypaintableitems = new CompanyPaintableItem();
+            foreach (var property in typeof(CompanyPaintableItem).GetProperties())
+            {
+                if (property.PropertyType == typeof(string))
+                {
+                    property.SetValue(companypaintableitems, "");
+                }
+                else if (property.PropertyType == typeof(int))
+                {
+                    property.SetValue(companypaintableitems, 0);
+                }
+                else if (property.PropertyType == typeof(float))
+                {
+                    property.SetValue(companypaintableitems, 0.0f);
+                }
+                else if (property.PropertyType == typeof(double))
+                {
+                    property.SetValue(companypaintableitems, 0.0);
+                }
+
+            }
+
+            args.EditModel = companypaintableitems;
+        }
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        var companypaintableitem = (CompanyPaintableItem)args.DataItem;
+        await pricingService.DeleteCompanyPaintableItemAsync(companypaintableitem.Id, companypaintableitem.CompanyId.ToString());
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        paintTypes = await pricingService.GetAllPaintTypesAsync();
+        pricingTypes = await pricingService.GetAllPricingTypesAsync();
+        paintableItemCategories = await pricingService.GetAllPaintableItemCategoriesAsync();
+
+        if (CompanyGuid != null)
+        {
+            companyPaintableItem = await pricingService.GetAllCompanyPaintableItemsAsync(CompanyGuid);
+        }
+
+        isBusy = false;
+        StateHasChanged();
+    }
+
+
+    private async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        var companypaintableitem = (CompanyPaintableItem)e.EditModel;
+
+        if (e.IsNew)
+        {
+            try
+            {
+                await pricingService.CreateCompanyPaintableItemAsync(companypaintableitem);
+                Logger.LogInformation($"Company paintable item created: {companypaintableitem.Id}");
+                
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"Error saving company paintable item. {ex.Message}");
+            }
+        }
+        else
+        {
+            await pricingService.UpdateCompanyPaintableItemAsync(companypaintableitem);
+            Logger.LogInformation($"Company paintable item updated: {companypaintableitem.Id}");
+        }
+        await UpdateData();
+    }
+}
+

@@ -1,0 +1,88 @@
+@using Blazorise
+@using Blazorise.Snackbar
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Entities.Reporting
+@using Microsoft.AspNetCore.Components
+@using MudBlazor
+@using MudExRichTextEditor
+
+
+@rendermode InteractiveWebAssembly
+
+<MudPopoverProvider />
+<MudPaper Class="pa-4" Elevation="2">
+    @if (isLoading)
+    {
+        <MudProgressCircular Indeterminate Color="MudBlazor.Color.Primary" />
+    }
+    else if (report == null)
+    {
+        <MudText Color="MudBlazor.Color.Error">Could not load report.</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.h5">Edit Project Report</MudText>   
+        <MudDivider Class="my-2" />
+         <RadzenHtmlEditor @bind-Value="report.ReportHTMLText" Style="min-height: 600px; height: 60vh;" PasteAsText="false" UploadUrl="upload/image">
+                            <RadzenHtmlEditorAlignLeft />
+                            <RadzenHtmlEditorAlignCenter />
+                            <RadzenHtmlEditorAlignRight />
+                            <RadzenHtmlEditorUndo />
+                            <RadzenHtmlEditorRedo />
+                            <RadzenHtmlEditorSeparator />
+                            <RadzenHtmlEditorBold />
+                            <RadzenHtmlEditorItalic />
+                            <RadzenHtmlEditorUnderline />
+                            <RadzenHtmlEditorStrikeThrough />
+                            <RadzenHtmlEditorSeparator />
+                            <RadzenHtmlEditorFontName />
+                            <RadzenHtmlEditorFontSize />
+                            <RadzenHtmlEditorSeparator />
+                            <RadzenHtmlEditorOrderedList />
+                            <RadzenHtmlEditorUnorderedList />
+                            <RadzenHtmlEditorSeparator />                            
+                            <RadzenHtmlEditorRemoveFormat />
+                            <RadzenHtmlEditorSeparator />
+                            <RadzenHtmlEditorLink />
+                            <RadzenHtmlEditorImage />
+                    </RadzenHtmlEditor>
+        <MudButton Color="MudBlazor.Color.Success" Variant="MudBlazor.Variant.Filled" OnClick="OnSaveReport">
+                <MudIcon Icon="@Icons.Material.Filled.Save" /> Save
+        </MudButton>
+        <Snackbar @ref="blazoriseSnackbar" Color="SnackbarColor.Success" Location="SnackbarLocation.Bottom">
+            <SnackbarBody>@snackbarMessage</SnackbarBody>
+        </Snackbar>
+    }
+</MudPaper>
+
+@code {
+    [Parameter] public int ReportId { get; set; }
+    [Inject] public IPricingService PricingService { get; set; } = default!;
+
+    private CompanyHTMLReport? report;
+    private bool isLoading = true;
+    private MudExRichTextEdit? richTextEdit;
+    private Blazorise.Snackbar.Snackbar? blazoriseSnackbar;
+    private string snackbarMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            report = await PricingService.GetCompanyHTMLReportAsync(ReportId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnSaveReport()
+    {
+        await PricingService.UpdateCompanyHTMLReportAsync(report);
+        snackbarMessage = "Report saved successfully.";
+        if (blazoriseSnackbar != null)
+            await blazoriseSnackbar.Show();
+    }
+}

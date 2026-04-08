@@ -1,0 +1,91 @@
+@inject ILogger<GlobalDefaultsComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+
+<LoadingIndicator Visible="@isBusy">
+    <DxGrid Data="@GlobalDefaultsList"
+            KeyFieldName="Id"
+            EditModelSaving="Grid_EditModelSaving"
+            DataItemDeleting="Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="HourlyRate" Caption="Hourly Rate" DisplayFormat="C" />
+            <DxGridDataColumn FieldName="TimePerSquareFootWall" Caption="Time/SqFt Wall" />
+            <DxGridDataColumn FieldName="TimePerSquareFootCeiling" Caption="Time/SqFt Ceiling" />
+            <DxGridDataColumn FieldName="TimePerSquareFootBaseboard" Caption="Time/SqFt Baseboard" />
+            <DxGridDataColumn FieldName="TimePerSquareFootDoor" Caption="Time/SqFt Door" />
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var globalDefaults = (GlobalDefaults)EditFormContext.EditModel;
+            }
+            <GlobalDefaultsEditForm GlobalDefaults="@globalDefaults" OnSave="OnSaveAsync" />
+        </EditFormTemplate>
+    </DxGrid>
+</LoadingIndicator>
+
+@code {
+    private List<GlobalDefaults> GlobalDefaultsList { get; set; }
+    public IGrid MyGrid { get; set; }
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+
+    // Method to initialize the list, for example, on component initialization
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        // Load the GlobalDefaultsList here, e.g., from an API call
+        GlobalDefaultsList = new List<GlobalDefaults>();
+        UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var globalDefaults = (GlobalDefaults)args.EditModel;
+        await OnSaveAsync(globalDefaults);
+    }
+
+    async Task OnSaveAsync(GlobalDefaults globalDefaults)
+    {
+        if (globalDefaults.Id == 0)
+        {
+            await pricingService.CreateGlobalDefaultsAsync(globalDefaults);
+        }
+        else
+        {
+            await pricingService.UpdateGlobalDefaultsAsync(globalDefaults);
+        }
+        UpdateData();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        var globalDefaults = (GlobalDefaults)args.DataItem;
+        await pricingService.DeleteGlobalDefaultsAsync(globalDefaults.Id);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        GlobalDefaultsList = await pricingService.GetAllGlobalDefaultsAsync();
+        isBusy = false;
+        StateHasChanged();
+    }
+}

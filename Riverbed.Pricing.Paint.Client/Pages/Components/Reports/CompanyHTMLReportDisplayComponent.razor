@@ -1,0 +1,71 @@
+@page "/reports/company-html-report-display/{ProjectGuid:guid}/{ReportTypeId:int}"
+@using Blazorise
+@inject Riverbed.Pricing.Paint.Shared.Services.IPricingService PricingService
+@rendermode InteractiveWebAssembly
+
+
+<style>
+    .report-html-content img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    .report-html-content.report-insurance img {
+        width: 100%;
+        object-fit: contain;
+    }
+
+    .report-html-content iframe,
+    .report-html-content embed,
+    .report-html-content object {
+        width: 100%;
+        height: 11.69in;
+        border: none;
+        display: block;
+    }
+</style>
+
+<Card Style="@CardStyle">
+    <CardBody Style="@CardBodyStyle">
+        @if (IsLoading)
+        {
+            <Spinner Color="Color.Primary" />
+        }
+        else if (Report != null)
+        {
+            <div class="@ContentCssClass" style="width:100%; overflow:hidden;">
+                @((MarkupString)Report.ReportHTMLText)
+            </div>
+        }
+        else
+        {
+            <Alert Color="Color.Danger">No report found for the specified parameters.</Alert>
+        }
+    </CardBody>
+</Card>
+
+@code {
+    [Parameter]
+    public Guid? ProjectGuid { get; set; }
+    [Parameter]
+    public int ReportTypeId { get; set; }
+
+    private CompanyHTMLReport? Report;
+    private bool IsLoading = true;
+    private bool IsInsuranceReport => ReportTypeId == 3;
+    private string CardStyle => IsInsuranceReport
+        ? "width:8.27in; min-height:11.69in; margin:auto; border:none; padding:0;"
+        : "width:8.27in; min-height:11.69in; margin:auto; border:none;";
+    private string CardBodyStyle => IsInsuranceReport ? "padding:0;" : "";
+    private string ContentCssClass => IsInsuranceReport
+        ? "report-html-content report-insurance"
+        : "report-html-content";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        IsLoading = true;
+        Report = await PricingService.GetCompanyHTMLReportByTypeAndProjectAsync(ReportTypeId, ProjectGuid.ToString());
+        IsLoading = false;
+    }
+}

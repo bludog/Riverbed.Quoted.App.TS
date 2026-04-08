@@ -1,0 +1,107 @@
+@page "/itemtype"
+
+@inject HttpClient Http
+@inject ILogger<ItemTypeComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+
+<LoadingIndicator @bind-Visible="@isBusy">
+    <DxGrid Data="@ItemTypes"
+            EditModelSaving="@Grid_EditModelSaving"
+            CustomizeEditModel="Grid_CustomizeEditModel"
+            DataItemDeleting="@Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="ItemTypeName" Caption="Item Type" />
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var newItemType = (ItemType)EditFormContext.EditModel;
+            }
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Item Name">
+                    <DxTextBox @bind-Text="@newItemType.ItemTypeName" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </EditFormTemplate>
+    </DxGrid>
+</LoadingIndicator>
+
+@code {
+    public ItemType itemType { get; set; } = new ItemType();
+    public bool isBusy { get; set; } = false;
+    public List<ItemType> ItemTypes { get; set; }
+    private IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    // Call the API to get the list of item types
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.IsNew)
+        {
+            var newItemType = new ItemType
+                {
+                    Id = 0,
+                    ItemTypeName = ""
+                };
+
+            e.EditModel = newItemType;
+        }
+
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        if (e.IsNew)
+        {
+            // Call the API to add a new item type
+            await pricingService.CreateItemTypeAsync(e.EditModel as ItemType);
+            ItemTypes.Add(itemType);
+        }
+        else
+        {
+            // Call the API to update an existing item type
+            await pricingService.UpdateItemTypeAsync(e.EditModel as ItemType);
+
+            var index = ItemTypes.FindIndex(i => i.Id == itemType.Id);
+            ItemTypes[index] = itemType;            
+        }
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        // Call the API to delete an item type
+        await pricingService.DeleteItemTypeAsync(((ItemType)e.DataItem).Id);
+        ItemTypes.Remove((ItemType)e.DataItem);
+        await UpdateDataAsync();
+    }
+
+    async Task UpdateDataAsync()
+    {
+        isBusy = true;
+        ItemTypes = await pricingService.GetAllItemTypesAsync();
+        isBusy = false;
+    }
+}

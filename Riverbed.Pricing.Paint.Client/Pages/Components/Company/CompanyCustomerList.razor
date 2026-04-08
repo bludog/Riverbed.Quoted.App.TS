@@ -1,0 +1,205 @@
+@page "/company-customer-list"
+
+@inject ILogger<CompanyCustomerList> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+<LoadingIndicator @ref="loadingIndicator">
+    <Layout>
+        <!-- Sticky header row with link to CompanyCustomerList on the right -->
+        <Div Class="sticky-top bg-white border-bottom">
+            <Div Class="container">
+                <Div Class="row py-2">
+                    <Div Class="col text-end">
+                        <a href="project/quoted-projects" class="btn btn-link">Project List</a>
+                    </Div>
+                </Div>
+            </Div>
+        </Div>
+        <br/>
+        <Div class="d-flex w-100 justify-content-between align-items-center">
+            <InputText @bind-Value="searchTerm" placeholder="Search by first or last name..." class="form-control me-2" style="max-width: 300px;" />
+            <Button Color="Color.Link" Clicked="HandleNew">New</Button>
+        </Div>
+        <p/>
+        <ListGroup Flush Mode="ListGroupMode.Selectable" @bind-SelectedItem="@selectedItem" Clicked="OnItemClicked">
+            <Repeater Items="@filteredCompanyCustomerList">
+                <ListGroupItem Name="@context.Id.ToString()">
+                    <Heading Size="HeadingSize.Is5" Margin="Margin.Is1.FromBottom">
+                        <Badge Color="Color.Success" Pill>1</Badge> @context.LastName, @context.FirstName
+                    </Heading>
+                    <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                        <Paragraph Margin="Margin.Is1.FromBottom">
+                            @context.City, @context.StateCode @context.ZipCode
+                        </Paragraph>
+                        <Button Color="Color.Link" Clicked="() => OnItemClicked(context.CustomerId.ToString())">
+                            <Icon Name="IconName.ChevronRight" IconSize="IconSize.Large" />
+                        </Button>
+                    </Div>
+                    <Small>@context.CreatedDate.ToString()</Small>
+                    <Button Size="Size.Small" Color="Color.Link"
+                            Clicked="@(() => {customerToDelete = context; modalRef.Show();})">
+                        Delete
+                    </Button>
+                </ListGroupItem>
+            </Repeater>
+        </ListGroup>
+    </Layout>
+</LoadingIndicator>
+
+<Modal @ref="modalRef">
+    <ModalContent Centered>
+        <ModalHeader >
+            <ModalTitle>Confirm Delete</ModalTitle>
+            <CloseButton />
+        </ModalHeader>
+        <ModalBody>
+            Are you sure you want to delete <b>@customerToDelete?.FirstName @customerToDelete?.LastName</b>?
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="@HideModal">Cancel</Button>
+            <Button Color="Color.Primary" Clicked="DeleteCustomerAsync">Confirm</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@code {
+    public string _companyGuid { get; set; }
+    public IEnumerable<CompanyCustomer> companyCustomerList { get; set; } = new List<CompanyCustomer>();
+    public CompanyCustomer companyCustomer { get; set; }
+    public int customerId { get; set; } = 0;
+    public string selectedItem = "";
+    public IPricingService pricingService { get; set; }
+    private LoadingIndicator loadingIndicator;
+
+    private CompanyCustomer? customerToDelete;
+
+    private Modal modalRef;
+
+    private string searchTerm = string.Empty;
+
+    private IEnumerable<CompanyCustomer> filteredCompanyCustomerList =>
+        string.IsNullOrWhiteSpace(searchTerm)
+            ? companyCustomerList
+            : companyCustomerList.Where(c =>
+                (!string.IsNullOrEmpty(c.FirstName) && c.FirstName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(c.LastName) && c.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            );
+
+    private Task ShowModal()
+    {
+        return modalRef.Show();
+    }
+
+    private Task HideModal()
+    {
+        return modalRef.Hide();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!(authState.User?.Identity?.IsAuthenticated ?? false))
+        {
+            NavigationManager.NavigateTo("Account/Login");
+            return;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await loadingIndicator.Show();
+            await LoadData();
+            await loadingIndicator.Hide();
+        }
+    }
+
+    public void OnItemClicked(string item)
+    {
+		loadingIndicator.Show();
+        NavigationManager.NavigateTo("company-customer-display/" + item);
+		loadingIndicator.Hide();
+    }
+
+    public void HandleNew()
+    {
+        NavigationManager.NavigateTo("company-customer-edit/" + customerId);
+    }
+
+    public async Task LoadData()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userName = user?.Identity?.Name;
+            
+            Logger.LogInformation("LoadData: Starting customer list load for user: {UserName}", userName);
+            
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                Logger.LogWarning("LoadData: Username is empty or null");
+                companyCustomerList = Array.Empty<CompanyCustomer>();
+                StateHasChanged();
+                return;
+            }
+            
+            _companyGuid = await pricingService.GetUserCompanyGuidAsync(userName);
+            Logger.LogInformation("LoadData: Retrieved company guid: {CompanyGuid}", _companyGuid);
+            
+            if (string.IsNullOrWhiteSpace(_companyGuid))
+            {
+                Logger.LogWarning("LoadData: Company guid is empty or null for user: {UserName}", userName);
+                companyCustomerList = Array.Empty<CompanyCustomer>();
+                StateHasChanged();
+                return;
+            }
+            
+            companyCustomerList = await pricingService.GetAllCompanyCustomersByGuidAsync(_companyGuid);
+            Logger.LogInformation("LoadData: Retrieved {Count} customers for company: {CompanyGuid}", companyCustomerList?.Count() ?? 0, _companyGuid);
+            
+            companyCustomer = companyCustomerList.FirstOrDefault();
+            if (companyCustomer != null)
+            {
+                selectedItem = companyCustomer.Id.ToString();
+                Logger.LogInformation("LoadData: Selected first customer: {CustomerId}", companyCustomer.Id);
+            }
+            else
+            {
+                Logger.LogWarning("LoadData: No customers found in the list");
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "LoadData: Error loading customer data");
+            companyCustomerList = Array.Empty<CompanyCustomer>();
+            StateHasChanged();
+        }
+    }
+
+    private void ConfirmDelete(CompanyCustomer customer)
+    {
+        customerToDelete = customer;
+    }
+
+    private async Task DeleteCustomerAsync()
+    {
+        if (customerToDelete != null)
+        {
+            await loadingIndicator.Show();
+            await pricingService.DeleteCompanyCustomerAsync(customerToDelete.Id);
+            customerToDelete = null;
+            await LoadData();
+            await modalRef.Hide();
+            await loadingIndicator.Hide();
+        }
+    }
+}

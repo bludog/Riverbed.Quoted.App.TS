@@ -1,0 +1,82 @@
+@rendermode InteractiveWebAssembly
+
+<DxFormLayout>
+    <DxFormLayoutItem Caption="Baseboards" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxCheckBox @bind-Checked="@companyDefaults.Baseboards" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Ceilings" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxCheckBox @bind-Checked="@companyDefaults.Ceilings" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Doors" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxCheckBox @bind-Checked="@companyDefaults.Doors" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Walls" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxCheckBox @bind-Checked="@companyDefaults.Walls" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Windows" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxCheckBox @bind-Checked="@companyDefaults.Windows" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Wall Paint Default" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxComboBox Data="@PaintTypes"
+                    TextFieldName="@nameof(PaintType.PaintTypeName)"
+                    ValueFieldName="@nameof(PaintType.Id)"
+                    @bind-Value="@companyDefaults.PaintTypeWallsId" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Ceiling Paint Default" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxComboBox Data="@PaintTypes"
+                    TextFieldName="@nameof(PaintType.PaintTypeName)"
+                    ValueFieldName="@nameof(PaintType.Id)"
+                    @bind-Value="@companyDefaults.PaintTypeCeilingsId" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Baseboard Paint Default" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxComboBox Data="@PaintTypes"
+                    TextFieldName="@nameof(PaintType.PaintTypeName)"
+                    ValueFieldName="@nameof(PaintType.Id)"
+                    @bind-Value="@companyDefaults.PaintTypeBaseboardsId" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Door/Trim Paint Default" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxComboBox Data="@PaintTypes"
+                    TextFieldName="@nameof(PaintType.PaintTypeName)"
+                    ValueFieldName="@nameof(PaintType.Id)"
+                    @bind-Value="@companyDefaults.PaintTypeTrimDoorsId" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Window Paint Default" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+        <DxComboBox Data="@PaintTypes"
+                    TextFieldName="@nameof(PaintType.PaintTypeName)"
+                    ValueFieldName="@nameof(PaintType.Id)"
+                    @bind-Value="@companyDefaults.PaintTypeWindowsId" />
+    </DxFormLayoutItem>
+</DxFormLayout>
+@{
+    if (!isGridEdit)
+    {
+        <p />
+        <DxButton RenderStyle="ButtonRenderStyle.Success" Click="@Save" Enabled="!isSending">
+            <div class="d-flex">
+                <DxWaitIndicator Visible="isSending" />
+                <span class="mx-2">@Message</span>
+            </div>
+        </DxButton>
+    }
+}
+
+@code {
+    [Parameter]
+    public CompanyDefaults companyDefaults { get; set; } = new CompanyDefaults();
+    [Parameter]
+    public List<CompanyPaintType> PaintTypes { get; set; } = new List<CompanyPaintType>();
+    [Parameter]
+    public Func<CompanyDefaults, Task> OnSaveCompanyDefaults { get; set; }
+    [Parameter]
+    public bool isGridEdit { get; set; } = false;
+    bool isSending = false;
+    string Message => isSending ? "Saving..." : "Save";
+
+    async Task Save()
+    {
+        isSending = true;
+        if (OnSaveCompanyDefaults != null)
+            await OnSaveCompanyDefaults(companyDefaults);
+        isSending = false;
+    }
+}

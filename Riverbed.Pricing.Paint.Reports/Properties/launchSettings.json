@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "Riverbed.Pricing.Paint.Reports": {
+      "commandName": "Project",
+      "launchBrowser": true
+    }}
+}

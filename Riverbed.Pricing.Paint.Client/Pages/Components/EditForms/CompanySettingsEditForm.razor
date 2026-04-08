@@ -1,0 +1,60 @@
+@rendermode InteractiveWebAssembly
+
+<DxFormLayout>
+    <DxFormLayoutItem Caption="HourlyRate" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companySettings.HourlyRate" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="OverheadPercentage" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companySettings.OverheadPercentage" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="LaborPercentage" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companySettings.LaborPercentage" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="MaterialPercentage" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companySettings.MaterialPercentage" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Total Percentage" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxTextBox ReadOnly="true" CssClass="@(TotalPercentage > 100 || TotalPercentage < 100 ? "text-danger font-weight:bold;" : "font-weight:bold;")" Text="@ConvertDecimalToString(TotalPercentage)" />
+    </DxFormLayoutItem>
+</DxFormLayout>
+
+@{
+    if (!isGridEdit)
+    {
+        <p/>
+        <DxButton RenderStyle="ButtonRenderStyle.Success" Click="@Save" Enabled="!(isSending || IsSaveDisabled || TotalPercentage > 100 || TotalPercentage < 100)">
+            <div class="d-flex">
+                <DxWaitIndicator Visible="isSending" />
+                <span class="mx-2">@Message</span>
+            </div>
+        </DxButton>
+    }
+}
+
+@code {
+    [Parameter]
+    public CompanySettings companySettings { get; set; } = new CompanySettings();
+    [Parameter]
+    public Func<CompanySettings, Task> OnSaveCompanySettings { get; set; }
+    [Parameter]
+    public bool isGridEdit { get; set; } = false;
+    [Parameter]
+    public bool IsSaveDisabled { get; set; } = false;
+    bool isSending = false;
+    string Message => isSending ? "Saving..." : "Save";
+
+    private decimal TotalPercentage => (decimal)(companySettings.OverheadPercentage + companySettings.LaborPercentage + companySettings.MaterialPercentage);
+
+    string ConvertDecimalToString(decimal value)
+    {
+        return value.ToString() + "%";
+    }
+
+    async Task Save()
+    {
+        isSending = true;
+        if (OnSaveCompanySettings != null)
+            await OnSaveCompanySettings(companySettings);
+        isSending = false;
+    }
+}

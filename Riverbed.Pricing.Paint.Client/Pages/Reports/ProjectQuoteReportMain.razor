@@ -1,0 +1,504 @@
+@page "/reports/project-quote-report-main/{ProjectGuid}"
+
+@using Blazorise
+@using Blazorise.Snackbar
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Logging
+@using ReportComponents = Riverbed.Pricing.Paint.Client.Pages.Components.Reports
+@using Riverbed.Pricing.Paint.Shared.Data
+@layout NoMenuLayout
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@rendermode InteractiveWebAssembly
+@attribute [AllowAnonymous]
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (selectedProject == null)
+{
+    <div class="alert alert-warning" role="alert">
+        Project not found or failed to load.
+    </div>
+}
+else
+{
+    <div id="top" class="mb-3 d-flex flex-wrap align-items-center gap-2">
+        <AuthorizeView>
+            <Authorized>
+                <Button Color="Color.Primary" Size="Size.Small" @onclick="GoBack">
+                    <Icon Name="IconName.ArrowLeft" /> Back
+                </Button>
+            </Authorized>
+        </AuthorizeView>
+
+        <Button Color="Color.Dark" Size="Size.Small" @onclick="@(()=>NavigateToFullReport())">
+            <Icon Name="IconName.File" /> Print
+        </Button>
+
+        @* Anchor Navigation Buttons *@
+        @foreach (var entry in _menuEntries)
+        {
+            <Button Color="Color.Light"
+                    Size="Size.Small"
+                    Class="btn-outline-primary"
+                    Clicked="() => NavigateToSection(entry.Page)">
+                @entry.Label
+            </Button>
+        }
+
+        @if (selectedProject?.StatusCodeId != 2 && selectedProject?.StatusCodeId != 5)
+        {
+            <div class="ms-auto d-flex gap-2">
+                <Button Color="Color.Success" Size="Size.Small" Clicked="ShowAcceptModal">
+                    <Icon Name="IconName.Check" /> Accept
+                </Button>
+                <Button Color="Color.Danger" Size="Size.Small" Clicked="ShowDeclineModal">
+                    Decline
+                </Button>
+            </div>
+        }
+    </div>
+
+    <Snackbar @ref="snackbarPrimary" Color="SnackbarColor.Primary" Location="SnackbarLocation.Bottom">
+        <SnackbarBody>@snackbarPrimaryMessage</SnackbarBody>
+    </Snackbar>
+
+    <div class="all-report-pages">
+        @foreach (var entry in _menuEntries)
+        {
+            <section id="@($"sec-{entry.Page}")" class="report-section mb-5">
+                <h2 class="h4 mb-3">@entry.Label</h2>
+                @RenderPageContent(entry.Page)
+                <div class="mt-3 text-end">
+                    <Button Color="Color.Link"
+                            Size="Size.Small"
+                            Clicked="NavigateToTop">
+                        Back to top
+                    </Button>
+                </div>
+            </section>
+        }
+    </div>
+
+    @if (pdfDownloadUrl != null)
+    {
+        <a href="@pdfDownloadUrl" download="CombinedReport.pdf" style="display:none" @ref="downloadLink"></a>
+    }
+
+    <!-- Accept Modal -->
+    <Modal @ref="acceptModal">
+        <ModalContent>
+            <ModalHeader><ModalTitle>Accept Quote</ModalTitle></ModalHeader>
+            <ModalBody><Text>Are you sure you want to accept this quote?</Text></ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="@(() => acceptModal.Hide())">Cancel</Button>
+                <Button Color="Color.Success" Clicked="HandleAcceptQuote">Accept</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+    <!-- Decline Modal -->
+    <Modal @ref="declineModal">
+        <ModalContent>
+            <ModalHeader><ModalTitle>Decline Quote</ModalTitle></ModalHeader>
+            <ModalBody><Text>Are you sure you want to decline this quote?</Text></ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="@(() => declineModal.Hide())">Cancel</Button>
+                <Button Color="Color.Danger" Clicked="HandleDeclineQuote">Decline</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+}
+
+@code {
+
+
+
+    [Parameter] public string ProjectGuid { get; set; } = string.Empty;
+    private Guid? ParsedProjectGuid { get; set; }
+    private bool isLoading = true;
+    private bool HideQuoteEdits { get; set; }
+
+    private bool ProjectActionsVisible { get; set; }
+
+    private ProjectData? selectedProject;
+    private List<StatusCode> statusCodes = new();
+    private Company company = new();
+
+    private Modal acceptModal = new();
+    private Modal declineModal = new();
+    private Snackbar snackbarPrimary;
+    private string snackbarPrimaryMessage = string.Empty;
+    private ElementReference downloadLink;
+    private string? pdfDownloadUrl;
+
+    [Inject] private IPricingService PricingService { get; set; }
+    [Inject] private ILogger<ProjectQuoteReportMain> Logger { get; set; }
+
+    private enum ReportPage { Welcome, AboutUs, Insurance, Quote, Agreement, Warranty, Signatures }
+    private record MenuEntry(ReportPage Page, string Label, int DisplayOrder);
+    private List<MenuEntry> _menuEntries = new();
+    private HashSet<int> _activeReportTypeIds = new();
+    private bool unauthenticatedNotified;
+    private bool _hasLoaded = false;
+
+
+    private bool IsPageVisible(ReportPage page) => page switch
+    {
+        ReportPage.Welcome => _activeReportTypeIds.Contains(4),
+        ReportPage.AboutUs => _activeReportTypeIds.Contains(2),
+        ReportPage.Insurance => true,
+        ReportPage.Agreement => _activeReportTypeIds.Contains(1),
+        ReportPage.Warranty => _activeReportTypeIds.Contains(6),
+        ReportPage.Signatures => _activeReportTypeIds.Contains(5),
+        ReportPage.Quote => true,
+        _ => false
+    };
+
+    private void BuildMenuEntries(List<(int ReportTypeId, int DisplayOrder, string ReportName)> minimal)
+    {
+        _menuEntries.Clear();
+        _activeReportTypeIds = minimal.Select(m => m.ReportTypeId).ToHashSet();
+
+        var dict = minimal.ToDictionary(m => m.ReportTypeId, m => m);
+
+        if (dict.TryGetValue(4, out var welcome))
+            _menuEntries.Add(new MenuEntry(ReportPage.Welcome, welcome.ReportName ?? "Welcome", 1));
+        if (dict.TryGetValue(2, out var about))
+            _menuEntries.Add(new MenuEntry(ReportPage.AboutUs, about.ReportName ?? "About Us", 2));
+
+        var insLabel = dict.TryGetValue(3, out var ins) && !string.IsNullOrWhiteSpace(ins.ReportName) ? ins.ReportName : "Insurance";
+        _menuEntries.Add(new MenuEntry(ReportPage.Insurance, insLabel, 3));
+        _menuEntries.Add(new MenuEntry(ReportPage.Quote, "Quote", 4));
+
+        var remaining = minimal
+            .Where(m => m.ReportTypeId is 1 or 6 or 5)
+            .OrderBy(m => m.DisplayOrder)
+            .ToList();
+
+        var order = 5;
+        foreach (var m in remaining)
+        {
+            switch (m.ReportTypeId)
+            {
+                case 1: _menuEntries.Add(new MenuEntry(ReportPage.Agreement, m.ReportName ?? "Agreement", order++)); break;
+                case 6: _menuEntries.Add(new MenuEntry(ReportPage.Warranty, m.ReportName ?? "Warranty", order++)); break;
+                case 5: _menuEntries.Add(new MenuEntry(ReportPage.Signatures, m.ReportName ?? "Signatures", order++)); break;
+            }
+        }
+
+        // Filter only visible pages
+        _menuEntries = _menuEntries.Where(me => IsPageVisible(me.Page)).OrderBy(me => me.DisplayOrder).ToList();
+    }
+
+    private RenderFragment RenderPageContent(ReportPage page) => builder =>
+    {
+        if (ParsedProjectGuid is null)
+        {
+            builder.AddMarkupContent(0, "<div class='alert alert-danger'>Invalid Project GUID.</div>");
+            return;
+        }
+        if (!IsPageVisible(page))
+        {
+            builder.AddMarkupContent(1, "<div class='text-muted'><em>Section not available.</em></div>");
+            return;
+        }
+
+        switch (page)
+        {
+            case ReportPage.Welcome:
+                builder.OpenComponent<ReportComponents.CompanyHTMLReportDisplayComponent>(0);
+                builder.AddAttribute(1, "ProjectGuid", ParsedProjectGuid);
+                builder.AddAttribute(2, "ReportTypeId", 4);
+                builder.CloseComponent();
+                break;
+            case ReportPage.AboutUs:
+                builder.OpenComponent<ReportComponents.CompanyHTMLReportDisplayComponent>(0);
+                builder.AddAttribute(1, "ProjectGuid", ParsedProjectGuid);
+                builder.AddAttribute(2, "ReportTypeId", 2);
+                builder.CloseComponent();
+                break;
+            case ReportPage.Insurance:
+                builder.OpenComponent<CompanyInsuranceReport>(0);
+                builder.AddAttribute(1, "InsurancePdfUrl", company.CompanyInsurancePdfUrl);
+                builder.CloseComponent();
+                break;
+            case ReportPage.Quote:
+                builder.OpenComponent<ProjectQuoteReport>(0);
+                builder.AddAttribute(1, "ProjectId", ParsedProjectGuid);
+                builder.CloseComponent();
+                break;
+            case ReportPage.Agreement:
+                builder.OpenComponent<ReportComponents.CompanyHTMLReportDisplayComponent>(0);
+                builder.AddAttribute(1, "ProjectGuid", ParsedProjectGuid);
+                builder.AddAttribute(2, "ReportTypeId", 1);
+                builder.CloseComponent();
+                break;
+            case ReportPage.Warranty:
+                builder.OpenComponent<ReportComponents.CompanyHTMLReportDisplayComponent>(0);
+                builder.AddAttribute(1, "ProjectGuid", ParsedProjectGuid);
+                builder.AddAttribute(2, "ReportTypeId", 6);
+                builder.CloseComponent();
+                break;
+            case ReportPage.Signatures:
+                builder.OpenComponent<ReportComponents.CompanyHTMLReportDisplayComponent>(0);
+                builder.AddAttribute(1, "ProjectGuid", ParsedProjectGuid);
+                builder.AddAttribute(2, "ReportTypeId", 5);
+                builder.CloseComponent();
+                break;
+        }
+    };
+
+    private string GetBaseUrl()
+    {
+#if DEBUG
+        return "https://localhost:7027";
+#else
+        return "https://bludog-software.com/rbp";
+#endif
+    }
+
+    private Task GoBack() => JS.InvokeVoidAsync("history.back").AsTask();
+
+    private void NavigateToFullReport()
+    {
+        if (ParsedProjectGuid.HasValue)
+            NavigationManager.NavigateTo($"reports/projectfullreport/{ParsedProjectGuid}");
+    }
+
+    private async Task DownloadCombinedPdf()
+    {
+        if (string.IsNullOrEmpty(ProjectGuid)) return;
+        var apiUrl = $"{NavigationManager.BaseUri.TrimEnd('/')}/api/report/combinedpdf/{ProjectGuid}";
+        var pdfBytes = await Http.GetByteArrayAsync(apiUrl);
+        pdfDownloadUrl = $"data:application/pdf;base64,{Convert.ToBase64String(pdfBytes)}";
+        StateHasChanged();
+        await Task.Yield();
+        await JS.InvokeVoidAsync("triggerFileDownload", downloadLink);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_hasLoaded) return;
+        try
+        {
+            isLoading = true;
+
+            if (!string.IsNullOrWhiteSpace(ProjectGuid) && Guid.TryParse(ProjectGuid, out var pg))
+                ParsedProjectGuid = pg;
+
+            if (!ParsedProjectGuid.HasValue)
+            {
+                Logger.LogDebug("Invalid ProjectGuid parameter: {ProjectGuid}", ProjectGuid);
+                return;
+            }
+
+            selectedProject = await PricingService.GetCustomerProjectAsync(ParsedProjectGuid.Value.ToString());
+            if (selectedProject == null)
+                return;
+
+            statusCodes = await PricingService.GetAllStatusCodesAsync();
+            var companyCustomer = await PricingService.GetCompanyCustomerAsync(selectedProject.CompanyCustomerGuidId.ToString());
+            if (companyCustomer != null)
+                company = await PricingService.GetCompanyAsync(companyCustomer.CompanyId);
+
+            try
+            {
+                var minimalDtos = await PricingService.GetActiveMinimalTemplateInfoAsync(company.Id.ToString());
+                var parsed = minimalDtos.Select(x => (x.ReportTypeId, x.DisplayOrder, x.ReportName)).ToList();
+                BuildMenuEntries(parsed);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Failed loading minimal template info; using fallback");
+                BuildMenuEntries(new List<(int, int, string)>
+                {
+                    (4,1,"Welcome"),(2,2,"About Us"),(3,3,"Insurance"),(1,5,"Agreement"),(6,6,"Warranty"),(5,7,"Signatures")
+                });
+            }
+
+            await NotifyCompanyIfUnauthenticated();
+
+            HideQuoteEdits = selectedProject.StatusCodeId > 1;
+            _hasLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Error initializing ProjectQuoteReportMain");
+            snackbarPrimaryMessage = "Error loading project";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task NotifyCompanyIfUnauthenticated()
+    {
+        if (unauthenticatedNotified) return;
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (authState.User?.Identity?.IsAuthenticated == true) return;
+
+            var toEmail = company?.Email;
+            if (string.IsNullOrWhiteSpace(toEmail)) return;
+
+            var customer = await PricingService.GetCompanyCustomerAsync(selectedProject.CompanyCustomerGuidId.ToString());
+            var projectName = selectedProject?.ProjectName ?? "Unknown Project";
+            var subject = $"Estimate just Viewed: {projectName}";
+            var link = $"{GetBaseUrl()}/reports/project-quote-report-main/{ParsedProjectGuid}";
+            var body = $@"<p>Your Customer - {customer.FirstName} {customer.LastName} just viewed their Estimate.</p>
+                           <ul>
+                             <li>Project: {projectName}</li>
+                             <li>ProjectGuid: {ParsedProjectGuid}</li>
+                             <li>When (UTC): {DateTime.UtcNow:u}</li>
+                             <li>Link: <a href='{link}'>{link}</a></li>
+                           </ul>";
+
+            await PricingService.SendProjectEmailAsync(ProjectGuid, subject, body, toAddress: toEmail, senderName: "Estimate Viewed", senderEmail: company.Email, companyReportTypeId: 1);
+            unauthenticatedNotified = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "View notification failed");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || snackbarPrimary == null || isLoading || selectedProject == null) return;
+        var status = statusCodes.FirstOrDefault(x => x.Id == selectedProject.StatusCodeId);
+        if (status != null)
+        {
+            snackbarPrimaryMessage = $"Project loaded. Status: {status.StatusCodeName}";
+            await snackbarPrimary.Show();
+        }
+    }
+
+    private async Task ShowAcceptModal() { if (acceptModal != null) await acceptModal.Show(); }
+    private async Task ShowDeclineModal() { if (declineModal != null) await declineModal.Show(); }
+
+    private async Task HandleAcceptQuote()
+    {
+        if (selectedProject == null || !ParsedProjectGuid.HasValue)
+        {
+            await ShowError("Project data not available"); return;
+        }
+        try
+        {
+            await ShowMessage("Processing quote acceptance...");
+            selectedProject.StatusCodeId = 2;
+            await PricingService.UpdateCustomerProjectAsync(selectedProject);
+            HideQuoteEdits = true;
+            await acceptModal.Hide();
+            await ShowMessage("Quote accepted successfully!");
+            await SendProjectLink();
+
+            // Send acceptance notification to the company
+            if (company is not null && !string.IsNullOrWhiteSpace(company.Email))
+            {
+                var customer = await PricingService.GetCompanyCustomerAsync(selectedProject.CompanyCustomerGuidId.ToString());
+                var customerName = customer is not null ? $"{customer.FirstName} {customer.LastName}" : "Customer";
+                var quoteLink = $"{GetBaseUrl()}/reports/project-quote-report-main/{ParsedProjectGuid}";
+                var companyBody = $@"
+                    <p>Project <strong>{selectedProject.ProjectName}</strong> has been accepted by {customerName}.</p>
+                    <p>Customer Email: {selectedProject.CustomerEmail}</p>
+                    <p>Customer Phone: {selectedProject.CustomerPhone}</p>
+                    <p>Address: {selectedProject.Address1}, {selectedProject.City}, {selectedProject.StateCode} {selectedProject.ZipCode}</p>
+                    <p>View quote: <a href='{quoteLink}'>{selectedProject.ProjectName} Quote</a></p>";
+
+                await PricingService.SendProjectEmailAsync(
+                    selectedProject.ProjectGuid.ToString(),
+                    $"Project Accepted - {selectedProject.ProjectName}",
+                    companyBody,
+                    toAddress: company.Email,
+                    senderName: "Quoted Notification",
+                    senderEmail: company.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Accept error");
+            await ShowError($"Error: {ex.Message}");
+        }
+    }
+
+    private async Task HandleDeclineQuote()
+    {
+        if (selectedProject == null)
+        {
+            await ShowError("Project data not available"); return;
+        }
+        try
+        {
+            selectedProject.StatusCodeId = 5;
+            await PricingService.UpdateCustomerProjectAsync(selectedProject);
+            HideQuoteEdits = true;
+            await declineModal.Hide();
+            await ShowMessage("Quote declined successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Decline error");
+            await ShowError($"Error: {ex.Message}");
+        }
+    }
+
+    private async Task SendProjectLink()
+    {
+        try
+        {
+            if (selectedProject == null || !ParsedProjectGuid.HasValue) return;
+            var toEmailAddress = string.IsNullOrEmpty(selectedProject.CustomerEmail) ? "stucker@360painting.com" : selectedProject.CustomerEmail;
+            var template = await PricingService.GetCompanyHTMLReportTemplateByTypeAndCompanyAsync(8, company.Id.ToString());
+            var customer = await PricingService.GetCompanyCustomerAsync(selectedProject.CompanyCustomerGuidId.ToString());
+            if (template == null)
+            {
+                await ShowError("Email template not found."); return;
+            }
+            var quoteLink = $"https:bludog-software.com/rbp/reports/project-quote-report-main/{ParsedProjectGuid}";
+
+            var body = await PricingService.MergeHtmlAsync(company.Id.ToString(), selectedProject.ProjectGuid.ToString(), template.ReportHTMLText ?? string.Empty);
+            await PricingService.SendEmailAsync(toEmailAddress, "Painting Quote", body, "Painting Quote", company.Email, "", true);
+            await ShowMessage($"Email sent to {toEmailAddress}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Email send error");
+            await ShowError($"Email failed: {ex.Message}");
+        }
+    }
+
+    private string GetCompanySignature() =>
+        $"<p/>Best regards,<br/><br/>{company.CompanyName}<br/>O: {company.PhoneNumber}<br/><a href='http://www.360painting.com/'>www.360painting.com</a>";
+
+    private async Task ShowMessage(string msg)
+    {
+        snackbarPrimaryMessage = msg;
+        if (snackbarPrimary != null) await snackbarPrimary.Show();
+    }
+    private async Task ShowError(string msg) => await ShowMessage(msg);
+
+    private void NavigateToSection(ReportPage page)
+    {
+        if (!ParsedProjectGuid.HasValue) return;
+        var baseUri = NavigationManager.Uri.Split('#')[0];
+        var fragment = $"sec-{page}";
+        NavigationManager.NavigateTo($"{baseUri}#{fragment}", forceLoad: false);
+    }
+
+    private void NavigateToTop()
+    {
+        var baseUri = NavigationManager.Uri.Split('#')[0];
+        NavigationManager.NavigateTo($"{baseUri}#top", forceLoad: false);
+    }
+}

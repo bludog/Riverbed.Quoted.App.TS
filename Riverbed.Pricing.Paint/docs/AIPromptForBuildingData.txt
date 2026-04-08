@@ -1,0 +1,13 @@
+{
+  "task": "retrieve specific building data as JSON",
+  "address": "2225 Windsor Place, New Braunfels, Texas 78130",
+  "data_required": [
+    "square_footage",
+    "number_of_bedrooms",
+    "number_of_bathrooms",
+    "year_built",
+    "property_value_estimate"
+  ],
+  "output_format": "json",
+  "response_type": "data_only"
+}

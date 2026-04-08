@@ -1,0 +1,325 @@
+﻿@using Blazorise
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Entities
+@inject Riverbed.Pricing.Paint.Shared.Services.IPricingService PricingService
+
+@inherits ComponentBase
+
+<Card Class="mx-auto my-3" Style="max-width:760px;">
+    <CardBody>
+        @if (isLoading)
+        {
+            <Div Class="text-center my-4">
+                <Spinner Color="Color.Primary" />
+            </Div>
+        }
+        else if (loadError != null)
+        {
+            <Alert Color="Color.Danger">@loadError</Alert>
+        }
+        else
+        {
+            @* <Heading Size="HeadingSize.Is4">Project Cost Breakdown</Heading>
+            <Divider /> *@
+
+            <Card Class="mb-3">
+                <CardBody>
+                    <Heading Size="HeadingSize.Is5">Labor (@FormatCurrency(HourlyRate) per hour)</Heading>
+                    <CardText>
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Labor</span>
+                                <small class="text-muted ms-2" style="line-height:1;">@FormatHours(LaborHours)</small>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(LaborCost)</strong></Div>
+                        </Div>
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Overhead</span>
+                                <small class="text-muted ms-2" style="line-height:1;">@FormatPercentage(SettingsOverhead)</small>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(OverheadForLabor)</strong></Div>
+                        </Div>
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Profit</span>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(ProfitForLabor)</strong></Div>
+                        </Div>
+
+                        @* Discount moved to overall subtotal (labor + materials) and shown below *@
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Tax</span>
+                                <small class="text-muted ms-2" style="line-height:1;">0%</small>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(0)</strong></Div>
+                        </Div>
+
+                        <Divider Class="my-2" />
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div style="line-height:1;"><strong>Subtotal</strong></Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(LaborSubtotal)</strong></Div>
+                        </Div>
+                    </CardText>
+                </CardBody>
+            </Card>
+
+            <Card Class="mb-3">
+                <CardBody>
+                    <Heading Size="HeadingSize.Is5">Materials</Heading>
+                    <CardText>
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Materials</span>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(MaterialCostTotal)</strong></Div>
+                        </Div>                       
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Profit Markup</span>
+                                <small class="text-muted ms-2" style="line-height:1;">@FormatPercentage(ProfitMarkup)</small>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(ProfitForMaterial)</strong></Div>
+                        </Div>
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div>
+                                <span style="line-height:1;">Tax</span>
+                                <small class="text-muted ms-2" style="line-height:1;">0%</small>
+                            </Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(0)</strong></Div>
+                        </Div>
+
+                        <Divider Class="my-2" />
+
+                        <Div Class="d-flex justify-content-between align-items-center py-0" style="line-height:1;">
+                            <Div style="line-height:1;"><strong>Subtotal</strong></Div>
+                            <Div style="line-height:1;"><strong>@FormatCurrency(MaterialSubtotal)</strong></Div>
+                        </Div>
+                    </CardText>
+                </CardBody>
+            </Card>
+
+            <div class="text-end mt-3">
+                @if (DiscountPercent != 0m)
+                {
+                    <Div Class="mb-1 text-end">Subtotal (Labor + Materials): <strong>@FormatCurrency(PreDiscountTotal)</strong></Div>
+                    <Div Class="mb-1 text-end">Discount (@FormatPercentage(DiscountPercent/100m)): <strong>-@FormatCurrency(DiscountAmount)</strong></Div>
+                }
+                <Heading Size="HeadingSize.Is4" Class="text-end">GRAND TOTAL @FormatCurrency(GrandTotal)</Heading>
+                <div class="text-muted text-end">Gross Profit @FormatCurrency(GrossProfit) (@FormatPercentage(GrossProfitPercent))</div>
+            </div>
+
+        @*     <div class="d-flex justify-content-end mt-3">
+                <Button Color="Color.Primary" Clicked="OnEdit">Edit</Button>
+            </div> *@
+        }
+    </CardBody>
+</Card>
+
+@code {
+    [Parameter] public string ProjectId { get; set; }
+
+    /// <summary>
+    /// Called when cost breakdown values are computed, providing LaborSubtotal, MaterialSubtotal, and GrandTotal.
+    /// </summary>
+    [Parameter] public EventCallback<CostBreakdownResult> OnCostsCalculated { get; set; }
+
+    private ProjectData projectData;
+    private CompanyCustomer companyCustomer;
+    private CompanySettings settings;
+    private List<Room> rooms = new();
+    private bool isLoading = false;
+    private string loadError;
+    private string? _previousProjectId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Only reload if ProjectId has actually changed to prevent infinite loop
+        if (ProjectId != _previousProjectId)
+        {
+            _previousProjectId = ProjectId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        loadError = null;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(ProjectId))
+            {
+                loadError = "ProjectId not provided.";
+                return;
+            }
+
+            projectData = await PricingService.GetCustomerProjectAsync(ProjectId);
+            if (projectData == null)
+            {
+                loadError = "Project not found.";
+                return;
+            }
+
+            // Get company customer to find company id
+            if (projectData.CompanyCustomerGuidId != Guid.Empty)
+            {
+                companyCustomer = await PricingService.GetCompanyCustomerAsync(projectData.CompanyCustomerGuidId.ToString());
+            }
+
+            if (companyCustomer != null && companyCustomer.CompanyId != Guid.Empty)
+            {
+                settings = await PricingService.GetCompanySettingsAsync(companyCustomer.CompanyId.ToString());
+            }
+            else
+            {
+                settings = null;
+            }
+
+            // load rooms and sum costs
+            rooms = await PricingService.GetRoomsByProjectIdAsync(projectData.Id) ?? new List<Room>();
+
+            // set discount percent from project adjustments if present
+            var adj = projectData.Adjustments?.Find(a => a.Type == AdjustmentType.Discount);
+            if (adj != null)
+                DiscountPercent = adj.IsPercentage ? adj.Value : 0m;
+            // compute all derived totals for display
+            ComputeTotals();
+
+            // Notify parent of calculated values
+            await OnCostsCalculated.InvokeAsync(new CostBreakdownResult
+            {
+                LaborSubtotal = LaborCost,
+                MaterialSubtotal = MaterialSubtotal,
+                GrandTotal = GrandTotal
+            });
+        }
+        catch (Exception ex)
+        {
+            loadError = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    [Parameter] public decimal DiscountPercent { get; set; } = 0m; // 0-100
+
+    // Calculated fields (populated by ComputeTotals)
+    private decimal LaborTotal;
+    private decimal LaborCost;
+    private decimal MaterialTotal;
+    private decimal OverheadForLabor;
+    private decimal ProfitForLabor;
+    private decimal ProfitForMaterial;
+    private decimal PreDiscountTotal;
+    private decimal DiscountAmount;
+    private decimal LaborHours;
+    private decimal LaborSubtotal;
+    private decimal MaterialProfit;
+    private decimal MaterialDiscount;
+    private decimal MaterialCostTotal;
+    private decimal MaterialSubtotal;
+    private decimal GrandTotal;
+    private decimal GrossProfit;
+    private decimal GrossProfitPercent;
+    private decimal SettingsOverhead;
+    private decimal HourlyRate;
+    private Adjustment? projectDiscount;
+
+    private decimal ProfitMarkup => 0.10m; // example 10% profit markup
+
+    private void ComputeTotals()
+    {
+        // base totals — exclude optional rooms
+        var billableRooms = rooms.Where(r => !r.IsOptional);
+        LaborTotal = Math.Round(billableRooms.Sum(r => (decimal)(r.LaborCost ?? 0f)), 2);
+        MaterialTotal = Math.Round(billableRooms.Sum(r => (decimal)(r.MaterialCost ?? 0f)), 2);
+
+        // compute settings-based percentages and rates
+        SettingsOverhead = NormalizePercent(settings?.OverheadPercentage ?? 0f);
+        HourlyRate = (decimal)(settings?.HourlyRate ?? 0f);
+        var laborPct = NormalizePercent(settings?.LaborPercentage ?? 0f);
+        LaborCost = Math.Round(LaborTotal * laborPct, 2);
+
+        // overhead and profit
+        OverheadForLabor = Math.Round(LaborTotal * SettingsOverhead, 2);
+		var profitPct = 1 - (laborPct + SettingsOverhead);
+        ProfitForLabor = Math.Round(LaborTotal * profitPct, 2);
+        ProfitForMaterial = Math.Round(MaterialTotal * ProfitMarkup, 2);
+
+        // discount applies to the pre-discount total (labor subtotal + material subtotal)
+        projectDiscount = projectData?.Adjustments?.FirstOrDefault(a => a.Type == AdjustmentType.Discount);
+        
+
+        // labor hours
+        LaborHours = HourlyRate > 0 ? Math.Round(LaborTotal / HourlyRate, 2) : 0m;
+
+        // subtotals
+        LaborSubtotal = Math.Round(LaborCost + OverheadForLabor + ProfitForLabor, 2);
+
+        MaterialProfit = ProfitForMaterial;
+        MaterialDiscount = 0m;
+        MaterialCostTotal = MaterialTotal - ProfitForMaterial;
+        MaterialSubtotal = MaterialTotal;
+
+        // pre-discount total = labor subtotal + material subtotal
+        PreDiscountTotal = Math.Round(LaborSubtotal + MaterialSubtotal, 2);
+        var pct = GetProjectDiscount(projectDiscount) / 100m;
+        DiscountAmount = Math.Round(PreDiscountTotal * pct, 2);
+        GrandTotal = Math.Round(PreDiscountTotal - DiscountAmount, 2);
+        GrossProfit = Math.Round(ProfitForLabor + ProfitForMaterial, 2);
+        GrossProfitPercent = GrandTotal > 0 ? Math.Round(GrossProfit / GrandTotal, 2) : 0m;
+    }
+
+    private static decimal NormalizePercent(float p)
+    {
+        var d = (decimal)p;
+        if (d > 1m) return d / 100m;
+        return d;
+    }
+
+    private string FormatCurrency(decimal v) => string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:C}", v);
+    private string FormatPercentage(decimal v) => string.Format("{0:0.###}%", v * 100m);
+    private string FormatHours(decimal hours)
+    {
+        var totalMinutes = (int)Math.Round(hours * 60);
+        var hh = totalMinutes / 60;
+        var mm = totalMinutes % 60;
+        return $"{hh}h {mm:00}m";
+    }
+
+    private void OnEdit()
+    {
+        // placeholder - navigate to edit page if needed
+    }
+
+    private int GetProjectDiscount(Adjustment? discount)
+    {
+        if (discount == null) return 0;
+        if (discount.Type == AdjustmentType.Discount)
+        {
+            return discount.Value;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Result object containing calculated cost breakdown values.
+    /// </summary>
+    public class CostBreakdownResult
+    {
+        public decimal LaborSubtotal { get; set; }
+        public decimal MaterialSubtotal { get; set; }
+        public decimal GrandTotal { get; set; }
+    }
+}

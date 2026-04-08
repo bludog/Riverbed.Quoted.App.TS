@@ -1,0 +1,104 @@
+@page "/reports/copy-global-company-html-templates/{CompanyGuid:guid}"
+@using Riverbed.Pricing.Paint.Shared.Entities.Reporting
+@using Riverbed.Pricing.Paint.Shared.Services
+@inject IPricingService PricingService
+@inject ILogger<CopyGlobalCompanyHTMLReportTemplates> Logger
+@inject NavigationManager Navigation
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Copy Global Company HTML Report Templates</PageTitle>
+
+<h3>Copy Global Company HTML Report Templates</h3>
+
+@if (isLoading)
+{
+    <Blazorise.LoadingIndicator Visible="true" />
+}
+else if (isInvalidGuid)
+{
+    <div class="alert alert-warning">Invalid or missing Company Guid.</div>
+}
+else if (globalTemplates == null || !globalTemplates.Any())
+{
+    <div class="alert alert-info">No global templates found.</div>
+}
+else
+{
+    <Blazorise.Card>
+        <Blazorise.CardHeader>
+            <strong>Global Templates</strong>
+        </Blazorise.CardHeader>
+        <Blazorise.CardBody>
+            <Blazorise.ListGroup>
+                @foreach (var template in globalTemplates)
+                {
+                    <Blazorise.ListGroupItem @key="template.Id">
+                        <div>
+                            <strong>@template.ReportName</strong> (Type: @template.ReportTypeId)
+                            <div class="text-muted small">Last Updated: @template.LastUpdatedDateTime.ToShortDateString()</div>
+                        </div>
+                    </Blazorise.ListGroupItem>
+                }
+            </Blazorise.ListGroup>
+        </Blazorise.CardBody>
+        <Blazorise.CardFooter>
+            <Blazorise.Button Color="Color.Primary" Clicked="CopyTemplatesAsync">Copy All Global Templates to Company</Blazorise.Button>   
+        </Blazorise.CardFooter>
+    </Blazorise.Card>
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <div class="alert alert-info mt-2">@statusMessage</div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid CompanyGuid { get; set; }
+
+    private List<CompanyHTMLReportTemplate> globalTemplates = new();
+    private bool isLoading = true;
+    private string? statusMessage;
+    private bool isInvalidGuid = false;
+    private Guid? lastLoadedGuid = null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        isInvalidGuid = CompanyGuid == Guid.Empty || CompanyGuid == new Guid("00000000-0000-0000-0000-000000000000");
+        if (!isInvalidGuid && CompanyGuid != lastLoadedGuid)
+        {
+            try
+            {
+                var allTemplates = await PricingService.GetCompanyHTMLReportTemplatesByCompanyAsync(CompanyGuid.ToString());
+                globalTemplates = allTemplates.Where(t => t.IsGlobalTemplate).ToList();
+                lastLoadedGuid = CompanyGuid;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading global templates");
+                statusMessage = $"Error loading templates: {ex.Message}";
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task CopyTemplatesAsync()
+    {
+        statusMessage = null;
+        isLoading = true;
+        try
+        {
+            await PricingService.CopyGlobalCompanyHTMLReportTemplatesToCompanyAsync(CompanyGuid.ToString());
+            statusMessage = "Global templates copied successfully.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error copying global templates");
+            statusMessage = $"Error copying templates: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

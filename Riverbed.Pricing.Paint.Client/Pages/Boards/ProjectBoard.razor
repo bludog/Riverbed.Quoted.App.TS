@@ -1,0 +1,493 @@
+@page "/customer-projects-board"
+@using System.Globalization
+@using DevExpress.Blazor
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Customer Projects</PageTitle>
+
+<DxLayoutRoot>
+    <DxLayoutHeader>
+        <DxToolbar RenderStyleMode="ToolbarRenderStyleMode.Contained">
+            <Items>
+                <DxToolbarItem BeginGroup="true" Alignment="ToolbarItemAlignment.Left">
+                    <Template>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <DxButton Text="New project" Click="NewProject" RenderStyle="ButtonRenderStyle.Primary" />
+                            <DxTextBox @bind-Text="SearchText" NullText="Search" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            <DxButton Text="Filter" Click="ToggleFilter" RenderStyle="ButtonRenderStyle.Secondary" />
+                            <DxButton Text="Sort" Click="ToggleSort" RenderStyle="ButtonRenderStyle.Secondary" />
+                            <DxButton Text="Group by" Click="ToggleGrouping" RenderStyle="ButtonRenderStyle.Secondary" />
+                        </div>
+                    </Template>
+                </DxToolbarItem>
+
+                <DxToolbarItem Alignment="ToolbarItemAlignment.Right">
+                    <Template>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <DxButton Text="Integrate" RenderStyle="ButtonRenderStyle.Secondary" />
+                            <DxButton Text="Automate" RenderStyle="ButtonRenderStyle.Secondary" />
+                        </div>
+                    </Template>
+                </DxToolbarItem>
+            </Items>
+        </DxToolbar>
+    </DxLayoutHeader>
+
+    <DxLayoutBody>
+        <DxLayoutContent CssClass="">
+            <DxAccordion ExpandMode="AccordionExpandMode.Multiple" ShowExpandCollapseButtons="true">
+                <Items>
+
+                    <DxAccordionItem Expanded="true">
+                        <HeaderTextTemplate>
+                            <div style="display:flex; align-items:center; gap:10px;; font-weight:600;">
+                                <DxBadge Text="Up And Coming" CssClass="" />
+                                <div>@($"{UpAndComing.Count} projects")</div>
+                            </div>
+                        </HeaderTextTemplate>
+                        <ContentTemplate>
+                            @BoardGrid(UpAndComing, BoardGroup.UpAndComing)
+                        </ContentTemplate>
+                    </DxAccordionItem>
+
+                    <DxAccordionItem Expanded="true">
+                        <HeaderTextTemplate>
+                            <div style="display:flex; align-items:center; gap:10px; font-weight:600;">
+                                <DxBadge Text="In-Progress Projects" CssClass="" />
+                                <div>@($"{InProgress.Count} projects")</div>
+                            </div>
+                        </HeaderTextTemplate>
+                        <ContentTemplate>
+                            @BoardGrid(InProgress, BoardGroup.InProgress)
+                        </ContentTemplate>
+                    </DxAccordionItem>
+
+                    <DxAccordionItem Expanded="true">
+                        <HeaderTextTemplate>
+                            <div style="display:flex; align-items:center; gap:10px; font-weight:600;">
+                                <DxBadge Text="Completed Waiting On Payment" CssClass="" />
+                                <div>@($"{CompletedWaitingOnPayment.Count} projects")</div>
+                            </div>
+                        </HeaderTextTemplate>
+                        <ContentTemplate>
+                            @BoardGrid(CompletedWaitingOnPayment, BoardGroup.CompletedWaitingOnPayment)
+                        </ContentTemplate>
+                    </DxAccordionItem>
+
+                </Items>
+            </DxAccordion>
+        </DxLayoutContent>
+    </DxLayoutBody>
+</DxLayoutRoot>
+
+<DxPopup @bind-Visible="ActionBarVisible"
+         ShowCloseButton="false"
+         CloseOnOutsideClick="false"
+         HeaderText="Actions"
+         Width="900px">
+    <BodyTemplate Context="popupContext">
+        <DxToolbar RenderStyleMode="ToolbarRenderStyleMode.Contained">
+            <Items>
+                <DxToolbarItem Alignment="ToolbarItemAlignment.Left">
+                    <Template Context="toolbarLeft">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <DxBadge Text="@($"{SelectedItems.Count} selected")" />
+                            <DxButton Text="Duplicate" Click="DuplicateSelected" />
+                            <DxButton Text="Export" Click="ExportSelected" />
+                            <DxButton Text="Archive" Click="ArchiveSelected" />
+                            <DxButton Text="Delete" Click="DeleteSelected" RenderStyle="ButtonRenderStyle.Danger" />
+                        </div>
+                    </Template>
+                </DxToolbarItem>
+
+                <DxToolbarItem Alignment="ToolbarItemAlignment.Right">
+                    <Template Context="toolbarRight">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <DxComboBox Data="@MoveTargets"
+                                        @bind-Value="MoveTarget"
+                                        TextFieldName="Text"
+                                        ValueFieldName="Value"
+                                        NullText="Move to..." />
+                            <DxButton Text="Move" Click="MoveSelected" RenderStyle="ButtonRenderStyle.Primary" />
+                            <DxButton Text="Close" Click="@(() => ActionBarVisible = false)" />
+                        </div>
+                    </Template>
+                </DxToolbarItem>
+            </Items>
+        </DxToolbar>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    // ---------- Models ----------
+    enum BoardGroup { UpAndComing, InProgress, CompletedWaitingOnPayment }
+
+    enum WorkStatus { Empty, Done, WorkingOnIt, Stuck }
+
+    enum InvoiceStatusState { Empty, NotReady, Ready, Sent, Paid, Cancelled }
+
+    sealed class ProjectRow {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public bool Selected { get; set; }
+
+        public string Project { get; set; } = "";
+        public string Painter { get; set; } = "";
+        public DateTime? Start { get; set; }
+        public DateTime? End { get; set; }
+
+        public bool OneTwoDown { get; set; }
+
+        public WorkStatus OrderPaint { get; set; }
+        public WorkStatus Paint { get; set; }
+
+        public decimal TotalJob { get; set; }
+        public decimal Labor { get; set; }
+        public decimal Materials { get; set; }
+        public decimal LaborPaid { get; set; }
+        public decimal CustPaid { get; set; }
+
+        public InvoiceStatusState InvoiceStatus { get; set; }
+        public string InvoiceNumber { get; set; } = "";
+
+        public BoardGroup Group { get; set; }
+    }
+
+    // ---------- State ----------
+    string SearchText = "";
+    bool FilterEnabled;
+    bool SortEnabled;
+    bool GroupingEnabled;
+
+    List<string> Painters = new() { "Angel", "Miguel", "Jonathan Leon", "Kevin & Gonzalo", "Lorenzo Harvey" };
+
+    List<ProjectRow> All = new();
+    List<ProjectRow> SelectedItems = new();
+
+    bool ActionBarVisible;
+
+    record MoveTargetItem(string Text, BoardGroup Value);
+    List<MoveTargetItem> MoveTargets = new() {
+        new("Up And Coming", BoardGroup.UpAndComing),
+        new("In-Progress Projects", BoardGroup.InProgress),
+        new("Completed Waiting On Payment", BoardGroup.CompletedWaitingOnPayment),
+    };
+    BoardGroup? MoveTarget;
+
+    // ---------- Computed ----------
+    List<ProjectRow> UpAndComing => ApplyView(All.Where(x => x.Group == BoardGroup.UpAndComing)).ToList();
+    List<ProjectRow> InProgress => ApplyView(All.Where(x => x.Group == BoardGroup.InProgress)).ToList();
+    List<ProjectRow> CompletedWaitingOnPayment => ApplyView(All.Where(x => x.Group == BoardGroup.CompletedWaitingOnPayment)).ToList();
+
+    IEnumerable<ProjectRow> ApplyView(IEnumerable<ProjectRow> query) {
+        if (!string.IsNullOrWhiteSpace(SearchText)) {
+            query = query.Where(x =>
+                x.Project.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                || x.InvoiceNumber.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // You can wire FilterEnabled/SortEnabled/GroupingEnabled into real DxGrid features later.
+        if (SortEnabled) {
+            query = query.OrderBy(x => x.Start ?? DateTime.MaxValue).ThenBy(x => x.Project);
+        }
+
+        return query;
+    }
+
+    // ---------- UI Builder ----------
+    RenderFragment BoardGrid(List<ProjectRow> rows, BoardGroup group) => @<div>
+        <DxGrid Data="@rows"
+                KeyFieldName="@nameof(ProjectRow.Id)"
+                PageSize="50"
+                ShowFilterRow="@FilterEnabled"
+                ShowGroupPanel="@GroupingEnabled"
+                SelectionMode="GridSelectionMode.Multiple"
+                SelectedDataItemsChanged="@(items => OnSelectionChanged(items))">
+
+            <ToolbarTemplate>
+                <DxToolbar>
+                    <TitleTemplate Context="toolbarContext">
+                        <div style="color:@GroupTitleColor(group); font-weight:600;">
+                            @GroupTitle(group)
+                        </div>
+                    </TitleTemplate>
+                </DxToolbar>
+            </ToolbarTemplate>
+
+            <Columns>
+                <DxGridSelectionColumn Width="60px" />
+
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.Project)" Caption="Project" MinWidth="260">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                            <div>@row.Project</div>
+                            <DxButton Text="↗" Click="@(() => ShowActions(row))" RenderStyle="ButtonRenderStyle.Secondary" />
+                        </div>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.Painter)" Caption="Painter" Width="180">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <DxComboBox Data="@Painters"
+                                    @bind-Value="row.Painter"
+                                    AllowUserInput="false"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                    NullText="Select painter" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn Caption="Timeline" MinWidth="220">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                            var text = TimelineText(row.Start, row.End);
+                        }
+                        <DxBadge Text="@text" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.OneTwoDown)" Caption="1/2 Down" Width="120">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <DxCheckBox @bind-Checked="row.OneTwoDown" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn Caption="Order Paint" Width="140">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <DxComboBox Data="@StatusOptions"
+                                    TextFieldName="Text"
+                                    ValueFieldName="Value"
+                                    AllowUserInput="false"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                    @bind-Value="row.OrderPaint" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn Caption="Paint" Width="120">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <DxComboBox Data="@StatusOptions"
+                                    TextFieldName="Text"
+                                    ValueFieldName="Value"
+                                    AllowUserInput="false"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                    @bind-Value="row.Paint" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.TotalJob)" Caption="Total Job" Width="140" DisplayFormat="c0" />
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.Labor)" Caption="Labor" Width="120" DisplayFormat="c0" />
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.Materials)" Caption="Materials" Width="130" DisplayFormat="c0" />
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.LaborPaid)" Caption="Labor Paid" Width="140" DisplayFormat="c0" />
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.CustPaid)" Caption="Cust Paid" Width="140" DisplayFormat="c0" />
+
+                <DxGridDataColumn Caption="Invoice Status" Width="160">
+                    <CellDisplayTemplate Context="ctx">
+                        @{
+                            var row = (ProjectRow)ctx.DataItem;
+                        }
+                        <DxComboBox Data="@InvoiceStatusOptions"
+                                    TextFieldName="Text"
+                                    ValueFieldName="Value"
+                                    AllowUserInput="false"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                                    @bind-Value="row.InvoiceStatus" />
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ProjectRow.InvoiceNumber)" Caption="Inv #" Width="120" />
+            </Columns>
+
+            <TotalSummary>
+                <DxGridSummaryItem FieldName="@nameof(ProjectRow.TotalJob)" SummaryType="GridSummaryItemType.Sum" DisplayFormat="Sum: {0:c0}" />
+                <DxGridSummaryItem FieldName="@nameof(ProjectRow.Labor)" SummaryType="GridSummaryItemType.Sum" DisplayFormat="Sum: {0:c0}" />
+                <DxGridSummaryItem FieldName="@nameof(ProjectRow.Materials)" SummaryType="GridSummaryItemType.Sum" DisplayFormat="Sum: {0:c0}" />
+                <DxGridSummaryItem FieldName="@nameof(ProjectRow.LaborPaid)" SummaryType="GridSummaryItemType.Sum" DisplayFormat="Sum: {0:c0}" />
+                <DxGridSummaryItem FieldName="@nameof(ProjectRow.CustPaid)" SummaryType="GridSummaryItemType.Sum" DisplayFormat="Sum: {0:c0}" />
+            </TotalSummary>
+        </DxGrid>
+
+    </div>;
+
+    readonly IReadOnlyList<StatusOption> StatusOptions = new List<StatusOption> {
+        new("", WorkStatus.Empty),
+        new("Done", WorkStatus.Done),
+        new("Working on it", WorkStatus.WorkingOnIt),
+        new("Stuck", WorkStatus.Stuck)
+    };
+
+    readonly IReadOnlyList<InvoiceStatusOption> InvoiceStatusOptions = new List<InvoiceStatusOption> {
+        new("", InvoiceStatusState.Empty),
+        new("Not Ready", InvoiceStatusState.NotReady),
+        new("Ready", InvoiceStatusState.Ready),
+        new("Sent", InvoiceStatusState.Sent),
+        new("Paid", InvoiceStatusState.Paid),
+        new("Cancelled", InvoiceStatusState.Cancelled)
+    };
+
+    static string TimelineText(DateTime? start, DateTime? end) {
+        if (start is null && end is null) return "";
+        if (start is not null && end is null) return start.Value.ToString("MMM d, yy", CultureInfo.InvariantCulture);
+        if (start is null && end is not null) return end.Value.ToString("MMM d, yy", CultureInfo.InvariantCulture);
+        return $"{start!.Value:MMM d, yy} - {end!.Value:MMM d, yy}";
+    }
+
+    // ---------- Lifecycle ----------
+    protected override void OnInitialized() {
+        Seed();
+    }
+
+    void Seed() {
+        All = new List<ProjectRow> {
+            new() { Project="Donna Doiron - Interior", Painter="Angel", Start=new DateTime(2025,8,28), End=new DateTime(2025,8,30), TotalJob=4771.24m, Labor=1800m, Materials=400m, OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.UpAndComing },
+            new() { Project="Donna Doiron - Exterior", Painter="Angel", Start=new DateTime(2025,9,1), End=new DateTime(2025,9,3), TotalJob=7818.66m, Labor=3200m, Materials=1100m, OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.UpAndComing },
+
+            new() { Project="David Weekly - 1448 Blushing Aster Int", Painter="Kevin & Gonzalo", Start=new DateTime(2026,1,22), End=new DateTime(2026,1,22), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=1776m, Labor=700m, Materials=350m, LaborPaid=700m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.UpAndComing },
+            new() { Project="David Weekly - 1449 Blushing Aster Int", Painter="Kevin & Gonzalo", Start=new DateTime(2026,1,22), End=new DateTime(2026,1,22), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=1776m, Labor=700m, Materials=350m, LaborPaid=700m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.UpAndComing },
+
+            new() { Project="David Weekly - 1444 Blushing Aster Ext", Painter="Jonathan Leon", Start=new DateTime(2026,1,22), End=new DateTime(2026,1,22), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=1776m, Labor=700m, Materials=350m, LaborPaid=700m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.InProgress },
+            new() { Project="David Weekly - 1457 Blushing Aster Ext", Painter="Jonathan Leon", Start=new DateTime(2026,1,22), End=new DateTime(2026,1,22), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=1776m, Labor=700m, Materials=350m, LaborPaid=700m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.InProgress },
+
+            new() { Project="David Weekly - 848 Teakmill (Interior)", Painter="Lorenzo Harvey", Start=new DateTime(2025,9,8), End=new DateTime(2025,9,9), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=2400m, Labor=1100m, Materials=1000m, CustPaid=2400m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.CompletedWaitingOnPayment },
+            new() { Project="Robin Wurzel - Full Interior", Painter="Lorenzo Harvey", Start=new DateTime(2025,10,6), End=new DateTime(2025,10,11), OrderPaint=WorkStatus.Empty, Paint=WorkStatus.Empty, TotalJob=10642.06m, Labor=4000m, Materials=1600m, CustPaid=10642.06m, InvoiceStatus=InvoiceStatusState.Empty, Group=BoardGroup.CompletedWaitingOnPayment }
+        };
+    }
+
+    // ---------- Selection / Action Bar ----------
+    void OnSelectionChanged(IReadOnlyList<object> items) {
+        SelectedItems = items.Cast<ProjectRow>().ToList();
+    }
+
+    // ---------- Actions ----------
+    void NewProject() => AddProject(BoardGroup.UpAndComing);
+
+    void AddProject(BoardGroup group) {
+        All.Insert(0, new ProjectRow {
+            Project = "New Project",
+            Start = DateTime.Today,
+            End = DateTime.Today.AddDays(1),
+            Group = group,
+            Painter = "",
+            OrderPaint = WorkStatus.Empty,
+            Paint = WorkStatus.Empty,
+            InvoiceStatus = InvoiceStatusState.Empty
+        });
+    }
+
+    void OpenProject(ProjectRow row) {
+        // Hook into your navigation or open a detail popup.
+        // NavigationManager.NavigateTo($"/projects/{row.Id}");
+    }
+
+    void ShowActions(ProjectRow row) {
+        SelectedItems.Clear();
+        SelectedItems.Add(row);
+        ActionBarVisible = true;
+    }
+
+    void ToggleFilter() => FilterEnabled = !FilterEnabled;
+    void ToggleSort() => SortEnabled = !SortEnabled;
+    void ToggleGrouping() => GroupingEnabled = !GroupingEnabled;
+
+    void DuplicateSelected() {
+        foreach (var row in SelectedItems.ToList()) {
+            var copy = new ProjectRow {
+                Project = row.Project + " (Copy)",
+                Start = row.Start,
+                End = row.End,
+                OneTwoDown = row.OneTwoDown,
+                OrderPaint = row.OrderPaint,
+                Paint = row.Paint,
+                TotalJob = row.TotalJob,
+                Labor = row.Labor,
+                Materials = row.Materials,
+                LaborPaid = row.LaborPaid,
+                CustPaid = row.CustPaid,
+                InvoiceStatus = row.InvoiceStatus,
+                InvoiceNumber = row.InvoiceNumber,
+                Group = row.Group
+            };
+            All.Add(copy);
+        }
+        ClearSelection();
+    }
+
+    void ExportSelected() {
+        // Wire to DevExpress export pipeline if you want (grid export),
+        // or generate CSV server-side. Keeping it stubbed here.
+        ClearSelection();
+    }
+
+    void ArchiveSelected() {
+        // If you add an "Archived" group, move them there instead.
+        foreach (var row in SelectedItems) {
+            row.InvoiceStatus = InvoiceStatusState.Paid;
+        }
+        ClearSelection();
+    }
+
+    void DeleteSelected() {
+        var ids = SelectedItems.Select(x => x.Id).ToHashSet();
+        All.RemoveAll(x => ids.Contains(x.Id));
+        ClearSelection();
+    }
+
+    void MoveSelected() {
+        if (MoveTarget is null) return;
+        foreach (var row in SelectedItems) {
+            row.Group = MoveTarget.Value;
+        }
+        ClearSelection();
+    }
+
+    void BulkMark(BoardGroup group, string field, WorkStatus value) {
+        var targets = All.Where(x => x.Group == group).ToList();
+        foreach (var row in targets) {
+            if (field == nameof(ProjectRow.OrderPaint)) row.OrderPaint = value;
+            if (field == nameof(ProjectRow.Paint)) row.Paint = value;
+        }
+    }
+
+    record StatusOption(string Text, WorkStatus Value);
+    record InvoiceStatusOption(string Text, InvoiceStatusState Value);
+
+    static string GroupTitle(BoardGroup group) => group switch {
+        BoardGroup.UpAndComing => "Up And Coming",
+        BoardGroup.InProgress => "In-Progress Projects",
+        BoardGroup.CompletedWaitingOnPayment => "Completed Waiting On Payment",
+        _ => string.Empty
+    };
+
+    static string GroupTitleColor(BoardGroup group) => group switch {
+        BoardGroup.UpAndComing => "#1b6cf2", // blue
+        BoardGroup.InProgress => "#1db954", // green
+        BoardGroup.CompletedWaitingOnPayment => "#f2c200", // yellow
+        _ => "inherit"
+    };
+
+    static string GroupColor(BoardGroup group) => group switch {
+        BoardGroup.UpAndComing => "#e25225",          // orange
+        BoardGroup.InProgress => "#1b6cf2",          // blue
+        BoardGroup.CompletedWaitingOnPayment => "#f2c200", // yellow
+        _ => "inherit"
+    };
+
+    void ClearSelection() {
+        SelectedItems.Clear();
+        ActionBarVisible = false;
+        MoveTarget = null;
+    }
+}

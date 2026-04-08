@@ -1,0 +1,52 @@
+@using Blazorise
+@rendermode InteractiveWebAssembly
+@inject IPricingService PricingService
+
+<Div Style="width:100%; max-width:400px;">
+    <TextEdit Text="@SearchText"
+              Placeholder="Start typing address..."
+              TextChanged="OnInput"
+              DebounceInterval="0"
+              Style="width:100%;" />
+
+    @if (Suggestions?.Any() == true)
+    {
+        <ListGroup Style="width:100%; border:1px solid #ccc; border-top:none; box-shadow:0 2px 8px rgba(0,0,0,0.1); max-height:250px; overflow-y:auto;">
+            @foreach (var suggestion in Suggestions)
+            {
+                <ListGroupItem Style="cursor:pointer;" @onclick="() => SelectSuggestion(suggestion)">
+                    @suggestion.Description
+                </ListGroupItem>
+            }
+        </ListGroup>
+    }
+</Div>
+
+@code {
+    [Parameter] public EventCallback<AddressDetailsDto> OnAddressSelected { get; set; }
+	[Parameter] public string SearchText { get; set; } 
+    private List<AddressSuggestionDto> Suggestions { get; set; } = new();
+
+    private async Task OnInput(string value)
+    {
+        SearchText = value;
+        if (!string.IsNullOrWhiteSpace(SearchText) && SearchText.Length > 2)
+        {
+            Suggestions = await PricingService.GetAddressSuggestionsAsync(SearchText);
+        }
+        else
+        {
+            Suggestions.Clear();
+        }
+        StateHasChanged();
+    }
+
+    private async Task SelectSuggestion(AddressSuggestionDto suggestion)
+    {
+        Suggestions.Clear();
+        SearchText = suggestion.Description;
+        var details = await PricingService.GetAddressDetailsAsync(suggestion.PlaceId);
+        await OnAddressSelected.InvokeAsync(details);
+        StateHasChanged();
+    }
+}

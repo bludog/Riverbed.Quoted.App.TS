@@ -1,0 +1,205 @@
+@page "/reports/projectworkorder/{ProjectId:guid}"
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Data
+@layout NoMenuLayout
+@namespace Riverbed.Pricing.Paint.Client.Pages.Reports
+@inject IPricingService PricingService
+@inject IJSRuntime JSRuntime
+
+<LoadingIndicator @ref="loadingIndicator" Loaded="StartLoadingIndicator">
+    <div class="pdf-container">
+        <Card Margin="Margin.Is0"
+              Class="pdf-card"
+              Border="Border.Is0"
+              Shadow="Shadow.None"
+              Style="border: 0; box-shadow: none; outline: none;">
+            <CardBody Padding="Padding.Is0" Class="pdf-card-body" Style="border: 0;">
+                <Container Fluid>
+                    <Row>
+                        <Column ColumnSize="ColumnSize.Is6">
+                            <div class="pdf-company-info">
+                                <Heading Size="HeadingSize.Is5" Margin="Margin.Is0">@company?.CompanyName</Heading>
+                                <Div>@company?.Address1</Div>
+                                @if (!string.IsNullOrEmpty(company?.Address2))
+                                {
+                                    <Div>@company?.Address2</Div>
+                                }
+                                <Div>@company?.City, @company?.StateCode @company?.ZipCode</Div>
+                                <Div>Call: @company?.PhoneNumber</Div>
+                            </div>
+                        </Column>
+                        <Column ColumnSize="ColumnSize.Is6" TextAlignment="TextAlignment.End">
+                            <div class="pdf-quote-header">
+                                <Heading Size="HeadingSize.Is1" Margin="Margin.Is0">QUOTE</Heading>
+                                <Div TextSize="TextSize.Small">Created: @DateTime.Now.ToString("M/d/yyyy h:mm:ss tt")</Div>
+                            </div>
+                        </Column>
+                    </Row>
+
+                    <Divider Margin="Margin.Is4.OnY" />
+
+                    <Row>
+                        <Column ColumnSize="ColumnSize.Is12">
+                            <Fields>
+                                <Field Horizontal>
+                                    <FieldLabel TextSize="TextSize.Medium" TextWeight="TextWeight.Bold" ColumnSize="ColumnSize.Is2">Project:</FieldLabel>
+                                    <FieldBody ColumnSize="ColumnSize.Is10">
+                                        <Div>@projectData?.ProjectName</Div>
+                                        <Div>@projectData?.Address1</Div>
+                                        @if (!string.IsNullOrEmpty(projectData?.Address2))
+                                        {
+                                            <Div>@projectData?.Address2</Div>
+                                        }
+                                        <Div>@projectData?.City, @projectData?.StateCode @projectData?.ZipCode</Div>
+                                    </FieldBody>
+                                </Field>
+                            </Fields>
+                        </Column>
+                    </Row>
+
+                    <Heading Size="HeadingSize.Is4" Margin="Margin.Is4.FromTop.Is2.FromBottom">Project Areas</Heading>
+
+                    <Table Bordered Striped Class="table-bordered">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHeaderCell>Name</TableHeaderCell>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            @foreach (var room in rooms)
+                            {
+                                <TableRow>
+                                    <TableRowCell>
+                                        <Text TextWeight="TextWeight.Bold">@room.Name</Text>
+                                        @if (room.IsOptional)
+                                        {
+                                            <Text> (Optional)</Text>
+                                        }
+                                        <Div>
+                                            <Text TextSize="TextSize.ExtraSmall">@GetRoomFeatures(room)</Text>
+                                        </Div>
+                                        <Div>
+                                            @if (room.Notes != null)
+                                            {
+                                                notesVisible = Visibility.Visible;
+                                            }
+                                            <Text TextSize="TextSize.ExtraSmall" Visibility="@notesVisible">@room.Notes</Text>
+                                        </Div>
+                                        @if (room.PaintableItems.Any())
+                                        {
+                                            foreach (var item in room.PaintableItems)
+                                            {
+                                                <Div>
+                                                    <Text TextSize="TextSize.ExtraSmall" TextWeight="TextWeight.SemiBold">(@item.Count) @item.Name</Text>
+                                                </Div>
+                                            }
+                                        }
+                                    </TableRowCell>
+                                </TableRow>
+                            }
+                        </TableBody>
+                    </Table>
+
+
+                    @if (!string.IsNullOrWhiteSpace(projectData?.ScopeOfWork))
+                    {
+                        <Card Margin="Margin.Is4.OnY">
+                            <CardHeader>
+                                <Heading Size="HeadingSize.Is5">Scope of Work</Heading>
+                            </CardHeader>
+                            <CardBody>
+                                <Text>@((MarkupString)projectData?.ScopeOfWork)</Text>
+                            </CardBody>
+                        </Card>
+                    }
+                </Container>
+            </CardBody>
+        </Card>
+    </div>
+</LoadingIndicator>
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public bool PrintMode { get; set; }
+
+    private bool IsPrintMode => PrintMode;
+
+    private ProjectData projectData;
+    private Company company;
+    private CompanyCustomer customer;
+    private List<Room> rooms = new List<Room>();
+    private string customerName;
+    private LoadingIndicator loadingIndicator = new LoadingIndicator();
+    private Visibility notesVisible = Visibility.Invisible;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData(); // Ensure all data is loaded during prerendering
+    }
+
+    private async Task<T> LoadWithRetry<T>(Func<Task<T>> loadFunc, int maxRetries = 3)
+    {
+        int attempts = 0;
+        while (attempts < maxRetries)
+        {
+            try
+            {
+                return await loadFunc();
+            }
+            catch (Exception ex) when (attempts < maxRetries - 1)
+            {
+                attempts++;
+                await Task.Delay(1000 * attempts); // Progressive delay
+            }
+        }
+        // Last attempt, let exception propagate if it fails
+        return await loadFunc();
+    }
+
+    private async Task LoadData()
+    {
+        // Load project data using IPricingService with retry for reliability
+        projectData = await LoadWithRetry(() => PricingService.GetCustomerProjectAsync(ProjectId.ToString()));
+
+        if (projectData != null)
+        {
+            // Load remaining data in parallel for better performance
+            var customerTask = LoadWithRetry(() => PricingService.GetCompanyCustomerByIdAsync(projectData.CompanyCustomerId));
+            var roomsTask = LoadWithRetry(() => PricingService.GetRoomsByProjectIdAsync(projectData.Id));
+
+            await Task.WhenAll(customerTask, roomsTask);
+
+            customer = await customerTask;
+            rooms = await roomsTask;
+
+            if (customer != null)
+            {
+                // Load company data
+                company = await LoadWithRetry(() => PricingService.GetCompanyAsync(customer.CompanyId));
+            }
+        }
+    }
+
+    private string GetRoomFeatures(Room room)
+    {
+        var features = new List<string>();
+
+        if (room.IncludeWalls) features.Add("Walls");
+        if (room.IncludeCeilings) features.Add("Ceilings");
+        if (room.IncludeBaseboards) features.Add("Baseboards");
+        if (room.IncludeCrownMoldings) features.Add("Crown Molding");
+        if (room.IncludeDoors && room.NumberOfDoors > 0) features.Add($"Doors ({room.NumberOfDoors})");
+        if (room.IncludeWindows && room.NumberOfWindows > 0) features.Add($"Windows ({room.NumberOfWindows})");
+
+        return string.Join("/", features);
+    }
+
+    private Task StartLoadingIndicator()
+    {
+        return Task.CompletedTask;
+    }
+}

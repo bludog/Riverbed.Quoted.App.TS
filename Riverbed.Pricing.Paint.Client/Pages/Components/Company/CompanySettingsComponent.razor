@@ -1,0 +1,178 @@
+@page "/companysettingscomponent"
+
+@inject HttpClient Http
+@inject ILogger<CompanySettingsComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    @{
+        if (CompanyGuid != null)
+        {
+            <h3>Company Settings</h3>
+            <CompanySettingsEditForm companySettings="@companysettings" OnSaveCompanySettings="@SaveCompanySettings" IsSaveDisabled="@IsSaveDisabled" />
+
+        }
+        else
+        {
+            <DxGrid Data="@companysettingss"
+                    EditModelSaving="Grid_EditModelSaving"
+                    DataItemDeleting="Grid_DataItemDeleting"
+                    EditMode="GridEditMode.PopupEditForm"
+                    @ref="MyGrid">
+                <Columns>
+                    <DxGridDataColumn FieldName="HourlyRate" Caption="Hr Rate" />
+                    <DxGridDataColumn FieldName="OverheadPercentage" Caption="Gross Profit" />
+                    <DxGridDataColumn FieldName="LaborPercentage" Caption="Labor %" />
+                    <DxGridDataColumn FieldName="MaterialPercentage" Caption="Material %" />
+                    <DxGridDataColumn FieldName="TotalPercentage" Caption="Total %" UnboundType="GridUnboundColumnType.Decimal" UnboundExpression="[OverheadPercentage] + [LaborPercentage] + [MaterialPercentage]" />
+                    <DxGridCommandColumn Width="60px">
+                        <HeaderTemplate>
+                            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                        </HeaderTemplate>
+                        <CellDisplayTemplate>
+                            @{
+                                <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                                <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+
+                <EditFormTemplate Context="EditFormContext">
+                    @{
+                        var newCompanySettings = (CompanySettings)EditFormContext.EditModel;
+                    }
+                </EditFormTemplate>
+
+            </DxGrid>
+        
+        }
+    }
+</LoadingIndicator>
+
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; } = null;
+    public List<CompanySettings> companysettingss { get; set; }
+    public CompanySettings companysettings { get; set; } = new CompanySettings();
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+    public bool IsSaveDisabled { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;        
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var companysettings = (CompanySettings)args.EditModel;
+        await SaveCompanySettings(companysettings);
+    }
+
+    // async Task SaveCompanySettings(CompanySettings companysettings)
+    // {
+    //     if (companysettings.Id == 0)
+    //     {
+    //         await pricingService.CreateCompanySettingsAsync(companysettings);
+    //     }
+    //     else
+    //     {
+    //         await pricingService.UpdateCompanySettingsAsync(companysettings);
+    //     }
+    //     UpdateData();
+    // }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs args)
+    {
+        if (args.IsNew)
+        {
+            var companysettings = new CompanySettings();
+            foreach (var property in typeof(CompanySettings).GetProperties())
+            {
+                if (property.PropertyType == typeof(string))
+                {
+                    property.SetValue(companysettings, "");
+                }
+                else if (property.PropertyType == typeof(int))
+                {
+                    property.SetValue(companysettings, 0);
+                }
+                else if (property.PropertyType == typeof(float))
+                {
+                    property.SetValue(companysettings, 0.0f);
+                }
+                else if (property.PropertyType == typeof(double))
+                {
+                    property.SetValue(companysettings, 0.0);
+                }
+            }
+
+            args.EditModel = companysettings;
+        }
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        await pricingService.DeleteCompanySettingsAsync(((CompanySettings)args.DataItem).Id);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        if (CompanyGuid != null)
+        {
+            companysettings = await pricingService.GetCompanySettingsAsync(CompanyGuid);
+            //companysettingss = new List<CompanySettings> { company };
+        }
+        else
+        {
+            companysettingss = await pricingService.GetAllCompanySettingsAsync();
+        }
+
+        isBusy = false;
+        StateHasChanged();
+    }
+
+    private decimal CalculateTotalPercentage(CompanySettings companySettings)
+    {
+        return (decimal)(companySettings.OverheadPercentage + companySettings.LaborPercentage + companySettings.MaterialPercentage);
+    }
+
+
+    private async Task SaveCompanySettings(CompanySettings companysettings)
+    {
+        var totalPercentage = CalculateTotalPercentage(companysettings);
+        if (totalPercentage > 100)
+        {
+            IsSaveDisabled = true;
+            return;
+        }
+        else
+        {
+            IsSaveDisabled = false;
+        }
+
+        if (companysettings.Id == 0)
+        {
+            await pricingService.CreateCompanySettingsAsync(companysettings);
+        }
+        else
+        {
+            await pricingService.UpdateCompanySettingsAsync(companysettings);
+        }
+        UpdateData();
+    }
+}
+

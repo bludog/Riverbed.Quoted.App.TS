@@ -1,0 +1,158 @@
+﻿@page "/ServiceTitanCompany"
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Models
+@using Riverbed.Pricing.Paint.Shared.Services
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Identity
+@using Blazorise.LoadingIndicator
+@inject HttpClient Http
+@inject ILogger<ServiceTitanCompany> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@attribute [Authorize]
+
+
+@* <LoadingIndicator Visible="@isBusy"> *@
+@if (IsNewCompany)
+{
+    <h3>Service Titan Company - New</h3>
+}
+else
+{
+    <h3>Service Titan Company - Update</h3>
+}
+
+<p>@FormValidationState</p>
+
+<LoadingIndicator @bind-Visible="@isBusy">
+    <!-- Company Service Titan Create/Update -->
+    <EditForm Model="@serviceTitanCompany"
+              OnValidSubmit="@SaveServiceTitanCompany"
+              OnInvalidSubmit="@HandleInvalidSubmit"
+              Context="EditFormContext">
+        <DataAnnotationsValidator />
+        <DevExpress.Blazor.DxFormLayout ColCountLg="4" ColCountMd="2" ColCountSm="12" OnSubmit="@SaveServiceTitanCompany">
+            <DevExpress.Blazor.DxFormLayoutItem Caption="Service Titan Tenant Id" ColSpanMd="12">
+                <DevExpress.Blazor.DxTextBox @bind-Text="@serviceTitanClientId" />
+            </DevExpress.Blazor.DxFormLayoutItem>
+            <DevExpress.Blazor.DxFormLayoutItem Caption="Service Titan Company Secret" ColSpanMd="12">
+                <DevExpress.Blazor.DxTextBox @bind-Text="@serviceTitanCompany.ServiceTitanSecretKey" />
+            </DevExpress.Blazor.DxFormLayoutItem>
+            <DevExpress.Blazor.DxFormLayoutItem Caption="Company Name" ColSpanMd="12">
+                <DevExpress.Blazor.DxTextBox @bind-Text="@serviceTitanCompany.CompanyName" />
+            </DevExpress.Blazor.DxFormLayoutItem>
+            <DxButton SubmitFormOnClick="true" Text="Save" />
+        </DevExpress.Blazor.DxFormLayout>
+    </EditForm>
+</LoadingIndicator>
+
+
+@code {
+    public ServiceTitanConnectionData serviceTitanCompany { get; set; } = new ServiceTitanConnectionData();
+    string FormValidationState = @"Press the ""Save"" button to validate the form.";
+    public IPricingService pricingService;
+    public string serviceTitanClientId { get; set; }
+    public string ServiceTitanToken { get; set; }
+    public string ServiceTitanUrl { get; set; } = "https://auth-integration.servicetitan.io";
+    public string ServiceTitanApiVersion { get; set; } = "v2";
+    public string CompanyGuid { get; set; }
+    public bool IsNewCompany { get; set; }
+    public bool isInitialized { get; set; }
+    public bool isBusy { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        isBusy = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            GetServiceTitanCompany();
+            isInitialized = true;
+            isBusy = false;
+        }
+    }
+
+    // Check if this is a new company or an existing company
+    public async void GetServiceTitanCompany()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        var companyGuid = await pricingService.GetUserCompanyGuidAsync(user.Identity.Name);
+        if (companyGuid == null)
+        {
+            FormValidationState = @"Company Guid not found";
+            IsNewCompany = true;
+        }
+
+        companyGuid = companyGuid.Replace("\"", "");
+        companyGuid = companyGuid.Replace("\'", "");
+        CompanyGuid = companyGuid;
+        serviceTitanCompany = await pricingService.GetServiceTitanConnectionDataAsync(companyGuid);
+
+        if (serviceTitanCompany == null)
+        {
+            FormValidationState = @"Service Titan Company not found";
+            serviceTitanCompany = new ServiceTitanConnectionData();
+            serviceTitanCompany.ServiceTitanApiUrl = ServiceTitanUrl;
+            serviceTitanCompany.ServiceTitanApiVersion = ServiceTitanApiVersion;
+            IsNewCompany = true;
+        }
+        else
+        {
+            serviceTitanClientId = serviceTitanCompany.ServiceTitanApiClientId.ToString();
+            IsNewCompany = false;
+        }
+        StateHasChanged();
+    }
+
+    // Save the Service Titan Company
+    public async Task SaveServiceTitanCompany()
+    {
+        isBusy = true;
+
+        // Save the Service Titan Company
+        serviceTitanCompany.ServiceTitanApiClientId = serviceTitanClientId;
+        serviceTitanCompany.CompanyGuid = Guid.Parse(CompanyGuid);
+
+        ServiceTitanConnectionData result = null;
+        if (IsNewCompany)
+        {
+            result = await pricingService.CreateServiceTitanConnectionDataAsync(serviceTitanCompany);
+            if (result != null)
+            {
+                FormValidationState = @"Service Titan Company saved";
+            }
+            else
+            {
+                FormValidationState = @"Service Titan Company not saved";
+                serviceTitanCompany = new ServiceTitanConnectionData();
+                serviceTitanCompany.ServiceTitanApiUrl = ServiceTitanUrl;
+                serviceTitanCompany.ServiceTitanApiVersion = ServiceTitanApiVersion;
+            }
+        }
+        else
+        {
+            serviceTitanCompany = await pricingService.UpdateServiceTitanConnectionDataAsync(serviceTitanCompany);
+        }
+        StateHasChanged();
+        isBusy = false;
+    }
+
+    // Check if this is a new company or an existing company
+
+    void HandleValidSubmit()
+    {
+        FormValidationState = @"Form data is valid";
+    }
+    void HandleInvalidSubmit()
+    {
+        FormValidationState = @"Form data is invalid";
+    }
+}

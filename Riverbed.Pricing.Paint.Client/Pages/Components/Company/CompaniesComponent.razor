@@ -1,0 +1,212 @@
+@page "/companies"
+
+@using Radzen
+@using System.Text.Json
+@inject ILogger<CompaniesComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+
+
+<LoadingIndicator Visible="@isBusy">
+    @{
+        if (companyGuid != null)
+        {
+            <h3>Company</h3>
+            <CompanyEditForm singleCompany="@singleCompany" OnSaveCompany="@SaveCompany" />
+        }
+        else
+        {
+            <h3>Companies</h3>
+            <DxGrid Data="@Companies"
+            EditModelSaving="Grid_EditModelSaving"
+            CustomizeEditModel="Grid_CustomizeEditModel"
+            DataItemDeleting="Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            KeyFieldName="Id"
+            @ref="MyGrid">
+                <Columns>
+                    <DxGridDataColumn FieldName="CompanyName" Caption="Name" />
+                    <DxGridDataColumn FieldName="Address1" Caption="Address" />
+                    <DxGridDataColumn FieldName="Address2" Caption="Address 2" />
+                    <DxGridDataColumn FieldName="City" Caption="City" />
+                    <DxGridDataColumn FieldName="StateCode" Caption="State" />
+                    <DxGridDataColumn FieldName="ZipCode" Caption="Zip" />
+                    <DxGridDataColumn FieldName="PhoneNumber" Caption="Phone" />
+                    <DxGridDataColumn FieldName="Email" Caption="Email" />
+                    <DxGridDataColumn FieldName="CompanyLogoURL" Caption="Logo URL" />
+                    <DxGridDataColumn FieldName="CompanyInsurancePdfUrl" Caption="Insurance URL" />
+                    <DxGridDataColumn FieldName="Id" Caption="Id" />
+                    <DxGridDataColumn FieldName="isActive" Caption="Active">
+                        <CellDisplayTemplate>
+                            <DxCheckBox @bind-Checked="@(((Company)context.DataItem).isActive)" />
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridCommandColumn Width="80px">
+                        <HeaderTemplate>
+                            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                        </HeaderTemplate>
+                        <CellDisplayTemplate>
+                            @{
+                                <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                                if (!isCompanyAdmin)
+                                {
+                                    <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                                }
+                                <Blazicon Svg="Ionicon.Folder" Style="margin-right: 10px;" @onclick="() => ShowCompanyDefaultModal((Company)context.DataItem)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+                <EditFormTemplate Context="EditFormContext">
+                    @{
+                        var newCompany = (Company)EditFormContext.EditModel;
+                    }
+                    <CompanyEditForm singleCompany="@newCompany" OnSaveCompany="@SaveCompany" isGridEdit="true" />
+                </EditFormTemplate>
+            </DxGrid>
+
+            <Modal @ref="modalSetDefaultCompany">
+                <ModalContent Centered>
+                    <ModalHeader>
+                        <ModalTitle>Set Company Defaults</ModalTitle>
+                        <CloseButton />
+                    </ModalHeader>
+                    <ModalBody>
+                        <Field>
+                            <FieldLabel>CompanyGuid</FieldLabel>
+                            <TextEdit Placeholder="Enter Company Guid..." @bind-Text="selectedCompanyGuid"/>
+                        </Field>                        
+                    </ModalBody>
+                    <ModalFooter>
+                        <Button Color="Color.Secondary" Clicked="@HideCompanyDefaultModal">Close</Button>
+                        <Button Color="Color.Primary" Clicked="@SetCompanyDefaults">Save Changes</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
+        }
+    }
+</LoadingIndicator>
+
+<Snackbar @ref="snackbar" Color="SnackbarColor.Success" Location="SnackbarLocation.Bottom">
+    <SnackbarBody>@snackbarMessage</SnackbarBody>
+</Snackbar>
+
+@code {
+
+    [Parameter]
+    public bool isCompanyAdmin { get; set; } = true;
+    [Parameter]
+    public string companyGuid { get; set; }
+    public string selectedCompanyGuid { get; set; } = string.Empty;
+    public List<Company> Companies { get; set; } = new List<Company>();
+    public Company singleCompany { get; set; } = new Company();
+    public IGrid MyGrid;
+    public IPricingService _pricingService { get; set; }
+    private Modal modalSetDefaultCompany;
+
+    public bool isBusy { get; set; } = false;
+
+    private Blazorise.Snackbar.Snackbar? snackbar;
+    private string snackbarMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pricingService = IPricingService;
+        UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var company = (Company)args.EditModel;
+        await SaveCompany(company);
+    }
+
+    async Task SaveCompany(Company company)
+    {
+        if (company.Id == Guid.Empty)
+        {
+            await _pricingService.CreateCompanyAsync(company);
+        }
+        else
+        {
+            await _pricingService.UpdateCompanyAsync(company);
+        }
+        snackbarMessage = $"Company '{company.CompanyName}' saved.";
+        if (snackbar is not null)
+        {
+            await snackbar.Show();
+        }
+        UpdateData();
+    }
+
+    private Task SetCompanyDefaults()
+    {
+        try
+        {
+            _pricingService.SetCompanyDefaultsAsync(Guid.Parse(selectedCompanyGuid));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error setting company defaults");
+        }
+        return modalSetDefaultCompany.Hide();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs args)
+    {
+        if (args.IsNew)
+        {
+            var company = new Company();
+            args.EditModel = company;
+        }
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        var companyGuid = ((Company)args.DataItem).Id;
+        await _pricingService.DeleteCompanyAsync(companyGuid);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        if (isCompanyAdmin)
+        {
+            if (Companies != null && Companies.Count() < 1)
+            {
+                try
+                {
+                    singleCompany = await _pricingService.GetCompanyAsync(Guid.Parse(companyGuid));
+                    // Companies.Clear();
+                    // Companies.Add(comp);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error getting user company guid");
+                }
+            }
+        }
+        else
+        {
+            Companies = await _pricingService.GetAllCompaniesAsync();
+        }
+        isBusy = false;
+        StateHasChanged();
+    }
+
+    private Task ShowCompanyDefaultModal(Company company)
+    {
+        selectedCompanyGuid = company.Id.ToString();
+        return modalSetDefaultCompany.Show();
+    }
+
+    private Task HideCompanyDefaultModal()
+    {
+        return modalSetDefaultCompany.Hide();
+    }
+}

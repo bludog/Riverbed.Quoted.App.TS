@@ -1,0 +1,88 @@
+@page "/paintqualitycomponent"
+
+@inject HttpClient Http
+@inject ILogger<PaintQualityComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    <DxGrid Data="@paintqualitys"
+            EditModelSaving="Grid_EditModelSaving"
+            DataItemDeleting="Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="PaintQualityName" Caption="Paint Quality" />
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+
+        </Columns>
+
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var newPaintQuality = (PaintQuality)EditFormContext.EditModel;
+            }
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="PaintQualityName" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                    <DxTextBox @bind-Text="@newPaintQuality.PaintQualityName" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </EditFormTemplate>
+
+    </DxGrid>
+</LoadingIndicator>
+
+
+@code {
+    public List<PaintQuality> paintqualitys { get; set; }
+    public PaintQuality paintquality { get; set; } = new PaintQuality();
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var paintquality = (PaintQuality)args.EditModel;
+        if (args.IsNew)
+        {
+            await pricingService.CreatePaintQualityAsync(paintquality);
+        }
+        else
+        {
+            await pricingService.UpdatePaintQualityAsync(paintquality);
+        }
+        UpdateData();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        await pricingService.DeletePaintQualityAsync(((PaintQuality)args.DataItem).Id);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        paintqualitys = await pricingService.GetAllPaintQualitiesAsync();
+        isBusy = false;
+        StateHasChanged();
+    }
+}
+

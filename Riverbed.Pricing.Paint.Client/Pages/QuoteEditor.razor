@@ -1,0 +1,62 @@
+@page "/quoteeditor"
+@using Blazorise
+@inject ILogger<CompanySettingsPage> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@attribute [Authorize(Roles = "Administrator,CompanyAdmin")]
+
+<PageTitle>Quote Editor</PageTitle>
+
+<Card Margin="Margin.Is4.FromStart.Is4.FromTop" Style="max-width: 1200px; margin-inline: auto;">
+    <CardHeader>
+        <CardTitle>Quote Editor</CardTitle>
+    </CardHeader>
+    <CardBody>
+        <Tabs SelectedTab="@selectedTab" SelectedTabChanged="@OnSelectedTabChanged" TabPosition="Blazorise.TabPosition.Top" Pills>
+            <Items>
+                <Tab Name="reports">Reports</Tab>
+                <Tab Name="templates">Templates</Tab>
+                <Tab Name="settings">Settings</Tab>
+            </Items>
+            <Content>
+                <TabPanel Name="reports">
+                    <CompanyHTMLReportsComponent CompanyGuid="@companyGuid" />
+                </TabPanel>
+                <TabPanel Name="templates">
+                    <h4>Quote Templates</h4>
+                    <p>Template editing functionality coming soon...</p>
+                </TabPanel>
+                <TabPanel Name="settings">
+                    <h4>Quote Settings</h4>
+                    <p>Settings configuration coming soon...</p>
+                </TabPanel>
+            </Content>
+        </Tabs>
+    </CardBody>
+</Card>
+
+@code {
+    private string selectedTab = "reports";
+    public bool isCompanyAdmin { get; set; } = true;
+    public string companyGuid { get; set; } = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+        //isCompanyAdmin = user.IsInRole("CompanyAdmin");
+        isCompanyAdmin = true;
+        if (isCompanyAdmin)
+        {
+            var guid = await IPricingService.GetUserCompanyGuidAsync(user.Identity.Name);
+            companyGuid = guid;
+        }
+    }
+
+    private Task OnSelectedTabChanged(string name)
+    {
+        selectedTab = name;
+        return Task.CompletedTask;
+    }
+}

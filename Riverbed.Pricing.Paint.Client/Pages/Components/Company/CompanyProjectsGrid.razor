@@ -1,0 +1,77 @@
+@page "/company-projects"
+@using Riverbed.Pricing.Paint.Shared.Data
+@using DevExpress.Blazor
+@using DevExpress.Export
+@inject IPricingService PricingService
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Company Projects</PageTitle>
+
+<LoadingIndicator Visible="@isBusy">
+    <DxGrid @ref="Grid"
+            Data="@projects"
+            ShowGroupPanel="true"
+            SelectionMode="GridSelectionMode.Multiple"
+            SelectAllCheckboxMode="GridSelectAllCheckboxMode.AllPages"
+            PageSize="5000">
+        <Columns>
+            <DxGridSelectionColumn Width="60px" AllowSelectAll="true" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.CompanyName)" Caption="Company" GroupIndex="0" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.CustomerName)" Caption="Customer" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.ProjectName)" Caption="Project" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.StatusCodeId)" Caption="Status" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.CreatedDate)" Caption="Created" DisplayFormat="MM/dd/yyyy" />
+            <DxGridDataColumn FieldName="@nameof(CompanyProjectsDto.BaseAmount)" Caption="Base Amount" DisplayFormat="c" />
+        </Columns>
+        <GroupSummary>
+            <DxGridSummaryItem FieldName="@nameof(CompanyProjectsDto.ProjectName)" SummaryType="DevExpress.Blazor.GridSummaryItemType.Count" ValueDisplayFormat=" {0}" />
+        </GroupSummary>
+        <ToolbarTemplate>
+            <DxToolbar>
+                <DxToolbarItem Text="Export to XLS" Click="ExportXls_Click" BeginGroup="true" />
+                <DxToolbarItem Text="Export to CSV" Click="ExportCsv_Click" BeginGroup="true" />    
+                <DxToolbarItem Context="itemCtx" Alignment="ToolbarItemAlignment.Right" BeginGroup="true">
+                    <Template>
+                        <DxCheckBox @bind-Checked="@ExportSelectedRowsOnly">Export Selected Rows Only</DxCheckBox>
+                    </Template>
+                </DxToolbarItem>
+            </DxToolbar>
+        </ToolbarTemplate>
+    </DxGrid>
+</LoadingIndicator>
+
+@code {
+    private List<CompanyProjectsDto> projects = new();
+    IGrid Grid { get; set; }
+    bool ExportSelectedRowsOnly { get; set; }
+    private bool isBusy = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isBusy = true;
+        projects = await PricingService.GetAllCompanyProjectsAsync();
+        isBusy = false;
+    }
+
+    async Task ExportXls_Click()
+    {
+        if (Grid != null)
+        {
+            await Grid.ExportToXlsAsync("CompanyProjects", new GridXlExportOptions()
+            {
+                ExportSelectedRowsOnly = ExportSelectedRowsOnly
+            });
+        }
+    }
+
+    async Task ExportCsv_Click()
+    {
+        if (Grid != null)
+        {
+            await Grid.ExportToCsvAsync("CompanyProjects", new GridCsvExportOptions()
+            {
+                ExportSelectedRowsOnly = ExportSelectedRowsOnly
+            });
+        }
+    }
+}

@@ -1,0 +1,64 @@
+﻿@page "/utils/download-pdf"
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<h3>Download PDF from HTML Page</h3>
+
+<button class="btn btn-primary" @onclick="DownloadPdfFromHtmlAsync">Download PDF</button>
+
+<script>
+    async function getRenderedHtml(url) {
+        const response = await fetch(url);
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        // Wait for dynamic content to load (if necessary)
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Adjust delay as needed
+
+        return doc.documentElement.outerHTML;
+    }
+
+    function saveAsFile(fileName, content) {
+        const blob = new Blob([content], { type: "application/pdf" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+@code {
+    private async Task DownloadPdfFromHtmlAsync()
+    {
+        // Get the base URL dynamically using NavigationManager
+        string baseUrl = NavigationManager.BaseUri.TrimEnd('/');
+
+        // Construct the URL for the projectquotereport
+        string url = $"{baseUrl}/api/reportdownload/GenerateProjectPdf/d2b29d03-1827-434e-a48e-d2c2a4750571";
+
+        // Use JSRuntime to fetch the fully rendered HTML
+        string htmlContent = await JSRuntime.InvokeAsync<string>("getRenderedHtml", url);
+
+        // Convert HTML to PDF using DevExpress RichEditDocumentServer
+        using (DevExpress.XtraRichEdit.RichEditDocumentServer richEditDocumentServer = new DevExpress.XtraRichEdit.RichEditDocumentServer())
+        {
+            richEditDocumentServer.HtmlText = htmlContent;
+
+            // Create a MemoryStream to hold the PDF content
+            using (var memoryStream = new System.IO.MemoryStream())
+            {
+                richEditDocumentServer.ExportToPdf(memoryStream);
+
+                // Convert the MemoryStream to a byte array
+                byte[] pdfBytes = memoryStream.ToArray();
+
+                // Use JSRuntime to trigger the download in the browser
+                await JSRuntime.InvokeVoidAsync("saveAsFile", "ProjectQuote.pdf", pdfBytes);
+            }
+        }
+    }
+}
