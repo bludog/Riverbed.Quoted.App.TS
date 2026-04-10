@@ -184,9 +184,15 @@ internal class Program
         {
             options.AddPolicy("AllowSpecificOrigins", policy =>
             {
-                policy.WithOrigins("https://localhost", "https://bludog-software.com")
+                policy.WithOrigins(
+                          "https://localhost:7027",
+                          "http://localhost:5073",
+                          "https://localhost:7120",
+                          "http://localhost:5139",
+                          "https://bludog-software.com")
                       .AllowAnyHeader()
-                      .AllowAnyMethod();
+                      .AllowAnyMethod()
+                      .AllowCredentials();
             });
         });
 

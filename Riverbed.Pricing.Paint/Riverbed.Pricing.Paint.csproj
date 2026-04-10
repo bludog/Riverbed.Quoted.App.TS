@@ -87,9 +87,9 @@
   </ItemGroup>
 
 	<!-- (Optional) Add this if you run �dotnet build� instead of �dotnet publish� -->
-	<Target Name="BuildClient" BeforeTargets="Publish">
-		<Exec Command="dotnet publish ../Riverbed.Pricing.Paint.Client/Riverbed.Pricing.Paint.Client.csproj -c Release" />
-	</Target>
+ <Target Name="BuildClient" BeforeTargets="Publish">
+        <Exec Command="dotnet publish ../Riverbed.Pricing.Paint.Client/Riverbed.Pricing.Paint.Client.csproj -c Release" />
+    </Target>
 
 	<ItemGroup>
     <Content Update="wwwroot\favicon2.png">

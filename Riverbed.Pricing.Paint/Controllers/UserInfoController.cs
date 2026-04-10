@@ -1,11 +1,21 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Riverbed.Pricing.Paint.Shared.Data;
+using System.Security.Claims;
 
 namespace Riverbed.Pricing.Paint.Controllers
 {
     public class UserInfoController : Controller
     {
+        public sealed class CurrentUserResponse
+        {
+            public required string UserId { get; set; }
+            public required string Email { get; set; }
+            public List<string> Roles { get; set; } = [];
+            public bool IsDarkMode { get; set; }
+        }
+
         private readonly ApplicationDbContext _context;
 
         public UserInfoController(ApplicationDbContext context)
@@ -67,6 +77,36 @@ namespace Riverbed.Pricing.Paint.Controllers
             user.IsDarkMode = isDarkMode;
             await _context.SaveChangesAsync();
             return Ok();
+        }
+
+        /// <summary>
+        /// Gets the current authenticated user profile for WebAssembly authentication state.
+        /// </summary>
+        [Authorize]
+        [HttpGet("api/UserInfo/Current")]
+        public async Task<IActionResult> GetCurrentUser()
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized();
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user is null || string.IsNullOrWhiteSpace(user.Email))
+            {
+                return Unauthorized();
+            }
+
+            var roles = User.FindAll(ClaimTypes.Role).Select(role => role.Value).Distinct().ToList();
+
+            return Ok(new CurrentUserResponse
+            {
+                UserId = user.Id,
+                Email = user.Email,
+                Roles = roles,
+                IsDarkMode = user.IsDarkMode
+            });
         }
     }
 }
