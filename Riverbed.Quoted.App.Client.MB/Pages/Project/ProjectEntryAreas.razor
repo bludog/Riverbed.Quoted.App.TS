@@ -1,0 +1,177 @@
+@page "/pricing/projectentryareas"
+
+
+@inject ILogger<ProjectEntryAreas> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator>
+    <Layout>
+        <LayoutContent>
+            <Div TextAlignment="TextAlignment.Center">
+                <Heading Size="HeadingSize.Is3">@companyCustomer.FirstName @companyCustomer.LastName</Heading>
+                    <Paragraph>
+                        <Heading Size="HeadingSize.Is4">@selectedProject.ProjectName</Heading>
+                        @selectedProject.Address1<br />
+                    @{
+                        if (!string.IsNullOrEmpty(selectedProject.Address2))
+                            @selectedProject.Address2
+
+                        <br />
+                    }
+                    @selectedProject.City, @selectedProject.StateCode @selectedProject.ZipCode<br />
+                    <Button Color="Color.Link" Clicked="@(() => EditJobPopupVisible = true)">Edit Job</Button>
+                </Paragraph>
+            </Div>
+            // Room Data Grid
+            <DataGrid TItem="ProjectArea" Data="@rooms" PageSize="10">  
+                <DataGridColumns>
+                    <DataGridColumn Field="@nameof(ProjectArea.ProjectAreaName)" Title="Room Name" />
+                    <DataGridColumn Field="@nameof(ProjectArea.Length)" Title="Length" />
+                    <DataGridColumn Field="@nameof(ProjectArea.Width)" Title="Width" />
+                    <DataGridColumn Field="@nameof(ProjectArea.Height)" Title="Height" />
+                    <DataGridColumn Field="@nameof(ProjectArea.NumberOfDoors)" Title="Doors" />
+                    <DataGridColumn Field="@nameof(ProjectArea.AreaTotal)" Title="Total SqFt" />
+                </DataGridColumns>
+            </DataGrid>
+        </LayoutContent>
+    </Layout>
+</LoadingIndicator>
+
+<DxPopup @bind-Visible="@EditJobPopupVisible"
+         ShowFooter="true"
+         HeaderText="Delete Project">
+    <BodyContentTemplate>
+        <Fields VerticalAlignment="Blazorise.VerticalAlignment.Middle" Model="@selectedProject">
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="ProjectName">Project Name</Label>
+                <TextEdit Placeholder="" @bind-Text="@selectedProject.ProjectName" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="Address1">Address 1</Label>
+                <TextEdit id="Address1" @bind-Text="@selectedProject.Address1" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="Address2">Address 2</Label>
+                <TextEdit id="Address2" @bind-Text="@selectedProject.Address2" />
+            </Field>
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="City">City</Label>
+                <TextEdit id="LastName" @bind-Text="@selectedProject.City" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="StateCode">State</Label>
+                <TextEdit id="StateCode" @bind-Text="@selectedProject.StateCode" />
+            </Field>
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="ZipCode">Zip</Label>
+                <TextEdit id="ZipCode" @bind-Text="@selectedProject.ZipCode" />
+            </Field>
+        </Fields>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="Save" Click="@(() => SaveProjectModal())" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => EditJobPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+
+@code {
+    [Parameter]
+    public string CustomerId { get; set; }
+    [Parameter]
+    public string ProjectId { get; set; }
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    public ProjectData selectedProject { get; set; }
+    public List<StatusCode> statusCodes { get; set; }
+    public List<PaintQuality> paintQualities { get; set; }
+    public IPricingService pricingService { get; set; }
+    public List<ProjectArea> rooms { get; set; } = new List<ProjectArea>();
+    private Grid roomGrid;
+    private bool EditJobPopupVisible { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!authState.User.Identity.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("Account/Login");
+        }
+        else
+        {
+            await LoadingIndicatorService.Show();
+            await LoadData();
+            await LoadingIndicatorService.Hide();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var projectId = int.Parse(ProjectId);
+        if (firstRender && projectId == 0)
+        {
+            EditJobPopupVisible = true;
+        }
+    }
+
+
+
+    public async Task LoadData()
+    {
+        companyCustomer = await pricingService.GetCompanyCustomerAsync(CustomerId);
+        var custId = companyCustomer.Id;
+        var projectId = int.Parse(ProjectId);
+
+        if (projectId == 0)
+        {
+            selectedProject = new ProjectData()
+                {
+                    CompanyCustomerId = custId,
+                    CreatedDate = DateTime.Now,
+                    BaseAmount = 0,
+                    CompletedDate = DateTime.Now.AddDays(30),
+                    StatusCodeId = 1
+                };
+        }
+        else
+        {
+            selectedProject = await pricingService.GetCustomerProjectAsync(ProjectId);
+            rooms = await pricingService.GetAllProjectAreasAsync(projectId);
+        }
+
+        statusCodes = await pricingService.GetAllStatusCodesAsync();
+        paintQualities = await pricingService.GetAllPaintQualitiesAsync();
+    }
+
+    public float GetRoomTotal(ProjectArea projArea)
+    {
+        float? totalCost = (projArea.LaborCost + projArea.MaterialCost);
+        return (float)totalCost;
+    }
+
+    public async Task SaveProjectModal()
+    {
+        await SaveProject();
+        EditJobPopupVisible = false;
+    }
+
+    public async Task SaveProject()
+    {
+        if (selectedProject.Id == 0)
+        {
+            selectedProject = await pricingService.CreateCustomerProjectAsync(selectedProject);
+        }
+        else
+        {
+            await pricingService.UpdateCustomerProjectAsync(selectedProject);
+        }
+    }
+}
+

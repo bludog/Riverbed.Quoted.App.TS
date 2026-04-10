@@ -1,5 +1,6 @@
 @page "/login"
 @using System.ComponentModel.DataAnnotations
+@using MudBlazor
 @inject ServerAuthenticationStateProvider AuthenticationStateProvider
 @inject NavigationManager Navigation
 
@@ -12,14 +13,14 @@
         <DataAnnotationsValidator />
 
         <MudTextField Label="Email"
-                      Variant="Variant.Outlined"
+                      Variant="MudBlazor.Variant.Outlined"
                       @bind-Value="_model.Email"
                       For="@(() => _model.Email)"
                       Required="true"
                       Class="mb-4" />
 
         <MudTextField Label="Password"
-                      Variant="Variant.Outlined"
+                      Variant="MudBlazor.Variant.Outlined"
                       InputType="InputType.Password"
                       @bind-Value="_model.Password"
                       For="@(() => _model.Password)"
@@ -33,7 +34,7 @@
             <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@_errorMessage</MudAlert>
         }
 
-        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="_isSubmitting">
+        <MudButton ButtonType="MudBlazor.ButtonType.Submit" Variant="MudBlazor.Variant.Filled" Color="MudBlazor.Color.Primary" FullWidth="true" Disabled="_isSubmitting">
             @(_isSubmitting ? "Signing in..." : "Sign in")
         </MudButton>
     </EditForm>

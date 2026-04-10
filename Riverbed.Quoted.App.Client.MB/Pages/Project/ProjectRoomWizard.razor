@@ -1,0 +1,1011 @@
+@page "/pricing/project-room-wizard/{ProjectId}/{AreaId}"
+@page "/pricing/project-room-wizard/{ProjectId}/{AreaId}/{Mode}"
+@using Blazorise
+@using Riverbed.Pricing.Paint.Client.Pages.Utils
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Services
+
+@inject ILogger<ProjectRoomWizard> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService PricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@layout NoMenuLayout
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator>
+    <Modal @bind-Visible="ShowPopup">
+        <ModalContent Size="ModalSize.Default">
+            <ModalHeader>
+                <h4>@(IsExteriorMode ? "Edit Building Dimensions" : "Edit Room Dimensions")</h4>
+            </ModalHeader>
+            <ModalBody>
+                <WheelLWHComponent @bind-Length="selectedRoom.Length" @bind-Width="selectedRoom.Width" @bind-Height="selectedRoom.Height" EndIndex="24" />
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" @onclick="HideModal">Save</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+
+    <Steps @ref="stepsRef" @bind-SelectedStep="selectedStep" NavigationAllowed="NavigationAllowed">
+        <Items>
+            <Step Name="1" Title="Step 1" Description="@(IsExteriorMode ? "Building Dimensions" : "Select Project Type")">@(IsExteriorMode ? "Dimensions" : "Info")</Step>
+            <Step Name="2" Title="Step 2" Description="@(IsExteriorMode ? "Exterior Surfaces" : "Select Options")">@(IsExteriorMode ? "Surfaces" : "Options")</Step>
+            <Step Name="3" Title="Step 3" Description="@(IsExteriorMode ? "Additional Exterior Items" : "Select Extras")">@(IsExteriorMode ? "Extras" : "Additional Items")</Step>
+            <Step Name="4" Title="Step 4" Description="Review and Submit">@(IsExteriorMode ? "Summary" : "Job Costs")</Step>
+        </Items>
+        <Content>
+            <StepPanel Name="1">
+                <Row>
+                    <Column ColumnSize="ColumnSize.Is6.Is3.WithOffset.OnDesktop.Is12.OnMobile.Is6.OnTablet">
+                        <CardDeck>
+                            <Card Shadow="Shadow.Default" Border="Border.Rounded">
+                                <Column Padding="Padding.Is3">
+                                    <Heading Size="HeadingSize.Is3">@(IsExteriorMode ? "Building Exterior" : "Room")</Heading>
+
+                                    <Fields VerticalAlignment="Blazorise.VerticalAlignment.Middle">
+                                        <Field ColumnSize="ColumnSize.Is12.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                            <Label for="ProjectName">@(IsExteriorMode ? "Exterior Description" : "Room Name")</Label>
+                                            <TextEdit Placeholder="@(IsExteriorMode ? "e.g., Building Exterior, Front Facade" : "")" @bind-Text="@selectedRoom.Name" />
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is4.OnMobile.Is4.OnTablet">
+                                            <Label for="Length">Length @(IsExteriorMode ? "(ft)" : "")</Label>
+                                            <NumericEdit id="Length" Size="Size.Small" @bind-Value="@selectedRoom.Length" />
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is4.OnMobile.Is4.OnTablet">
+                                            <Label for="Width">Width @(IsExteriorMode ? "(ft)" : "")</Label>
+                                            <NumericEdit id="Width" Size="Size.Small" @bind-Value="@selectedRoom.Width" />
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is4.OnMobile.Is4.OnTablet">
+                                            <Label for="Height">@(IsExteriorMode ? "Height (ft)" : "Ceiling")</Label>
+                                            <NumericEdit id="Height" Size="Size.Small" @bind-Value="@selectedRoom.Height" />
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is6.OnMobile.Is6.OnTablet">
+                                            <Button Color="Color.Primary" Margin="Margin.Is2.FromEnd" Clicked="() => ShowModal()">
+                                                @(IsExteriorMode ? "Edit Dimensions" : "Edit L/W/H")
+                                            </Button>
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is8.OnDesktop.Is6.OnMobile.Is6.OnTablet">
+                                            <Label>
+                                                @(IsExteriorMode ? "Perimeter SqFt:" : "SqFt:")
+                                                @{
+                                                    var TotalSqFt = IsExteriorMode 
+                                                        ? 2 * (selectedRoom.Length + selectedRoom.Width) * selectedRoom.Height
+                                                        : selectedRoom.Length * selectedRoom.Width;
+                                                }
+                                                @TotalSqFt
+                                            </Label>
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                            <Label for="NumberOfDoors">@(IsExteriorMode ? "Exterior Doors" : "Doors (1-side)")</Label>
+                                            <NumericEdit id="NumberOfDoors" @bind-Value="@selectedRoom.NumberOfDoors" />
+                                        </Field>
+
+                                        @if (!IsExteriorMode)
+                                        {
+                                            <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                                <Label for="NumberOfWindows">Windows</Label>
+                                                <NumericEdit id="NumberOfWindows" @bind-Value="@selectedRoom.NumberOfWindows" />
+                                            </Field>
+                                        }
+
+                                        <Field ColumnSize="ColumnSize.Is12.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                            <Check TValue="bool" @bind-Checked="@selectedRoom.IsOptional">@(IsExteriorMode ? "Optional Exterior Work" : "Optional")</Check>
+                                        </Field>
+
+                                        <Field ColumnSize="ColumnSize.Is12.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                            <Label for="Notes">Notes</Label>
+                                            <MemoEdit Rows="3" Placeholder="@(IsExteriorMode ? "Additional exterior details..." : "")" @bind-Text="@selectedRoom.Notes" />
+                                        </Field>
+                                    </Fields>
+                                </Column>
+                            </Card>
+                        </CardDeck>
+                    </Column>
+                </Row>
+            </StepPanel>
+
+            <StepPanel Name="2">
+                <Row>
+                    <Column ColumnSize="ColumnSize.Is6.Is3.WithOffset.OnDesktop.Is12.OnMobile.Is6.OnTablet">
+                        <CardDeck>
+                            <Card Shadow="Shadow.Default" Border="Border.Rounded">
+                                <Column Padding="Padding.Is3">
+                                    <Heading Size="HeadingSize.Is3">@selectedRoom.Name</Heading>
+
+                                    <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is4.OnMobile.Is4.OnTablet">
+                                        <Label>Additional Prep Time @(IsExteriorMode ? "(hrs)" : "")</Label>
+                                        <NumericEdit @bind-Value="@selectedRoom.AdditionalPrepTime" />
+                                    </Field>
+
+                                    <Fields VerticalAlignment="Blazorise.VerticalAlignment.Middle">
+                                        <Field ColumnSize="ColumnSize.Is12">
+                                            <Label for="PaintQualityId">Paint Quality</Label>
+                                            <Select @bind-SelectedValue="@selectedRoom.PaintQualityId">
+                                                <SelectItem Value="0">Select Paint Quality</SelectItem>
+                                                @foreach (var paintQuality in paintQualities)
+                                                {
+                                                    <SelectItem Value="@paintQuality.Id">@paintQuality.PaintQualityName</SelectItem>
+                                                }
+                                            </Select>
+                                        </Field>
+
+                                        <Divider />
+
+                                        <Heading Size="HeadingSize.Is5">@(IsExteriorMode ? "Exterior Surfaces" : "Paint Type & Coats")</Heading>
+
+                                        @foreach (var s in surfacesVm.OrderBy(x => x.DisplayOrder))
+                                        {
+                                            <Div Class="mb-3 w-100">
+                                                <Field>
+                                                    <Row Class="g-3 align-items-start flex-wrap">
+                                                        <Column ColumnSize="ColumnSize.Is12">
+                                                            <Check TValue="bool" @bind-Checked="s.Included">@s.GetTitle(IsExteriorMode)</Check>
+                                                        </Column>
+
+                                                        @if (s.Included)
+                                                        {
+                                                            @foreach (var layer in s.Layers.OrderBy(l => l.SortOrder))
+                                                            {
+                                                                <Column ColumnSize="ColumnSize.Is12">
+                                                                    <Row Class="g-2 align-items-end">
+                                                                        <Column ColumnSize="ColumnSize.Is3.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                                                            <Label Class="mb-1 fw-semibold">Layer</Label>
+                                                                            <Select @bind-SelectedValue="layer.LayerType">
+                                                                                <SelectItem Value="@PaintLayerType.Primer">Primer</SelectItem>
+                                                                                <SelectItem Value="@PaintLayerType.Finish">Finish</SelectItem>
+                                                                                <SelectItem Value="@PaintLayerType.ClearCoat">Clear Coat</SelectItem>
+                                                                                <SelectItem Value="@PaintLayerType.Stain">Stain</SelectItem>
+                                                                                <SelectItem Value="@PaintLayerType.Other">Other</SelectItem>
+                                                                            </Select>
+                                                                        </Column>
+
+                                                                        <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                                                                            <Label Class="mb-1 fw-semibold">Paint</Label>
+                                                                            <Select @bind-SelectedValue="layer.PaintTypeId">
+                                                                                <SelectItem TValue="int?">Select Paint</SelectItem>
+                                                                                @foreach (var p in companyPaintTypes)
+                                                                                {
+                                                                                    <SelectItem Value="@((int?)p.Id)">@p.PaintTypeName</SelectItem>
+                                                                                }
+                                                                            </Select>
+                                                                        </Column>
+
+                                                                        <Column ColumnSize="ColumnSize.Is2.OnDesktop.Is6.OnMobile.Is6.OnTablet">
+                                                                            <Label Class="mb-1 fw-semibold">Coats</Label>
+                                                                            <Select @bind-SelectedValue="layer.Coats">
+                                                                                <SelectItem Value="1">1</SelectItem>
+                                                                                <SelectItem Value="2">2</SelectItem>
+                                                                                <SelectItem Value="3">3</SelectItem>
+                                                                            </Select>
+                                                                        </Column>
+
+                                                                        <Column ColumnSize="ColumnSize.Is1.OnDesktop.Is6.OnMobile.Is6.OnTablet">
+                                                                            <Button Color="Color.Danger" Size="Size.Small" Clicked="@(() => RemoveLayer(s, layer))">X</Button>
+                                                                        </Column>
+                                                                    </Row>
+                                                                </Column>
+                                                            }
+
+                                                            <Column ColumnSize="ColumnSize.Is12">
+                                                                <Button Color="Color.Primary" Size="Size.Small" Clicked="@(() => AddLayer(s))">
+                                                                    + Add Layer
+                                                                </Button>
+                                                            </Column>
+                                                        }
+                                                    </Row>
+                                                </Field>
+                                            </Div>
+                                        }
+                                    </Fields>
+                                </Column>
+                            </Card>
+                        </CardDeck>
+                    </Column>
+                </Row>
+            </StepPanel>
+
+            <StepPanel Name="3">
+                <Row Style="display: flex; min-height: 0;">
+                    <Column ColumnSize="ColumnSize.Is6.Is3.WithOffset.OnDesktop.Is12.OnMobile.Is6.OnTablet" Style="display: flex; min-height: 0;">
+                        <CardDeck Style="width: 100%; display: flex; min-height: 0;">
+                            <Card Padding="Padding.Is3" Shadow="Shadow.Default" Border="Border.Rounded" Style="width: 100%; min-height: 0;">
+                                <Column Style="min-height: 0;">
+                                    <PaintableItemsList CompanyGuid="@CompanyGuid" RoomId="selectedRoom.Id" />
+                                </Column>
+                            </Card>
+                        </CardDeck>
+                    </Column>
+                </Row>
+            </StepPanel>
+
+            <StepPanel Name="4">
+                @{
+                    if (selectedRoom != null && selectedRoom.Id > 0)
+                    {
+                        <Row>
+                            <Column ColumnSize="ColumnSize.Is6.Is3.WithOffset.OnDesktop.Is12.OnMobile.Is6.OnTablet">
+                                <CardDeck>
+                                    <Card Padding="Padding.Is3" Shadow="Shadow.Default" Border="Border.Rounded">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHeaderCell>Item</TableHeaderCell>
+                                                    <TableHeaderCell>Cost</TableHeaderCell>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                <AuthorizeView>
+                                                    <Authorized>
+                                                        <TableRow>
+                                                            <TableRowCell>Labor</TableRowCell>
+                                                            <TableRowCell>@(selectedRoom.LaborCost?.ToString("C") ?? "$0.00")</TableRowCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableRowCell>Material</TableRowCell>
+                                                            <TableRowCell>@(selectedRoom.MaterialCost?.ToString("C") ?? "$0.00")</TableRowCell>
+                                                        </TableRow>
+                                                    </Authorized>
+                                                </AuthorizeView>
+                                                <TableRow>
+                                                    <TableRowCell><b>Total:</b></TableRowCell>
+                                                    <TableRowCell><b>@(selectedRoom.TotalCost().ToString("C"))</b></TableRowCell>
+                                                </TableRow>
+                                            </TableBody>
+                                        </Table>
+                                    </Card>
+                                </CardDeck>
+                            </Column>
+                        </Row>
+                    }
+                }
+            </StepPanel>
+        </Content>
+    </Steps>
+
+    <Div Display="Display.Flex" Class="justify-content-center" Margin="Margin.Is5.FromBottom">
+        @{
+            if (selectedStep != "1")
+            {
+                <Button Color="Color.Primary" Margin="Margin.Is2.FromEnd" Clicked="@(() => LogAndExecute("PreviousStep", stepsRef.PreviousStep))">
+                    Previous
+                </Button>
+            }
+            else
+            {
+                <Button Color="Color.Secondary" Margin="Margin.Is2.FromEnd" Clicked="@(() => LogAndExecute("Cancel", Cancel))">
+                    Cancel
+                </Button>
+            }
+
+            if (selectedStep == "4")
+            {
+                <Button Color="Color.Success" Clicked="@(() => LogAndExecute("FinalStep", FinalStep))">
+                    Complete
+                </Button>
+            }
+            else
+            {
+                <Button Color="Color.Primary" Clicked="@(() => LogAndExecute("NextStep", NextStep))">
+                    Next
+                </Button>
+            }
+        }
+    </Div>
+</LoadingIndicator>
+
+@code {
+    // ----------------------------
+    // Routing params
+    // ----------------------------
+    [Parameter] public string ProjectId { get; set; } = "";
+    [Parameter] public string AreaId { get; set; } = "";
+    [Parameter] public string? Mode { get; set; }
+
+    // ----------------------------
+    // Mode detection
+    // ----------------------------
+    private bool IsExteriorMode => !string.IsNullOrEmpty(Mode) && Mode.Equals("exterior", StringComparison.OrdinalIgnoreCase);
+
+    // ----------------------------
+    // Existing fields
+    // ----------------------------
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    public Room selectedRoom { get; set; } = new Room();
+    public Room compareRoom { get; set; } = new Room();
+    public List<PaintQuality> paintQualities { get; set; } = new();
+    public string CompanyGuid { get; set; } = "";
+    private bool ShowPopup = false;
+    private bool newRoom = false;
+    private List<CompanyPaintType> companyPaintTypes { get; set; } = new();
+
+    private Steps stepsRef = default!;
+    private string selectedStep = "1";
+    private bool _hasLoaded = false;
+
+    // ----------------------------
+    // New: surfaces+layers VM
+    // ----------------------------
+    private List<SurfaceVm> surfacesVm = new();
+
+    // Baseboards default height = 4"
+    private const decimal BaseboardFaceInchesDefault = 4m;
+
+    // ----------------------------
+    // VM types (local to page)
+    // ----------------------------
+    private sealed class SurfaceVm
+    {
+        public SurfaceType SurfaceType { get; set; }
+        public int? RoomSurfaceId { get; set; }
+        public bool Included { get; set; }
+
+        public decimal AreaSqFt { get; set; }
+        public decimal? LinearFt { get; set; }
+
+        public List<LayerVm> Layers { get; set; } = new();
+
+        public string GetTitle(bool isExteriorMode) => SurfaceType switch
+        {
+            SurfaceType.Walls => isExteriorMode ? "Exterior Walls" : "Walls",
+            SurfaceType.Doors => isExteriorMode ? "Exterior Doors" : "Doors",
+            SurfaceType.Ceiling => "Ceiling",
+            SurfaceType.Baseboards => "Baseboards",
+            SurfaceType.Windows => "Windows",
+            _ => SurfaceType.ToString()
+        };
+
+        public int DisplayOrder => SurfaceType switch
+        {
+            SurfaceType.Walls => 10,
+            SurfaceType.Ceiling => 20,
+            SurfaceType.Baseboards => 30,
+            SurfaceType.Windows => 40,
+            SurfaceType.Doors => 50,
+            _ => 999
+        };
+    }
+
+    private sealed class LayerVm
+    {
+        public int? RoomSurfacePaintLayerId { get; set; }
+        public PaintLayerType LayerType { get; set; } = PaintLayerType.Finish;
+        public int? PaintTypeId { get; set; }
+        public decimal Coats { get; set; } = 2m;
+        public decimal WasteFactor { get; set; } = 0.10m;
+        public int SortOrder { get; set; } = 1;
+    }
+
+    // ----------------------------
+    // Lifecycle
+    // ----------------------------
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_hasLoaded && !string.IsNullOrWhiteSpace(ProjectId) && !string.IsNullOrWhiteSpace(AreaId))
+        {
+            _hasLoaded = true;
+
+            Logger.LogInformation("OnParametersSetAsync - Loading Data with ProjectId: {ProjectId} and AreaId: {AreaId}", ProjectId, AreaId);
+
+            await LoadingIndicatorService.Show();
+            await LoadData();
+            await LoadingIndicatorService.Hide();
+            StateHasChanged();
+        }
+    }
+
+    private bool NavigationAllowed(StepNavigationContext context) => true;
+
+    // ----------------------------
+    // Wizard buttons
+    // ----------------------------
+    private async Task NextStep()
+    {
+        Logger.LogInformation("[NextStep] Current Step: {SelectedStep}", selectedStep);
+
+        try
+        {
+            if (selectedStep == "1")
+            {
+                Logger.LogInformation("[NextStep] Step 1: Saving room before advancing...");
+                // Save room when moving from dimensions to surfaces
+                await SaveRoom();
+                Logger.LogInformation("[NextStep] Step 1: Room saved. Room ID: {RoomId}", selectedRoom.Id);
+            }
+            else if (selectedStep == "2")
+            {
+                Logger.LogInformation("[NextStep] Step 2: Starting save process. Room ID: {RoomId}", selectedRoom.Id);
+
+                // Ensure room exists
+                if (selectedRoom.Id == 0)
+                {
+                    Logger.LogInformation("[NextStep] Step 2: Room ID is 0, creating room...");
+                    await SaveRoom();
+                    newRoom = true;
+                    Logger.LogInformation("[NextStep] Step 2: Room created. New Room ID: {RoomId}", selectedRoom.Id);
+
+                    // After creating room, reload surfaces VM to get proper IDs
+                    if (selectedRoom.Id > 0)
+                    {
+                        await LoadSurfacesVm();
+                    }
+                }
+                else
+                {
+                    Logger.LogInformation("[NextStep] Step 2: Updating existing room...");
+                    await SaveRoom();
+                    Logger.LogInformation("[NextStep] Step 2: Room updated.");
+                }
+
+                // Persist surfaces + layers (new feature)
+                Logger.LogInformation("[NextStep] Step 2: Saving surfaces and layers...");
+                await SaveRoomSurfacesAndLayers();
+                Logger.LogInformation("[NextStep] Step 2: Surfaces and layers saved.");
+            }
+            else if (selectedStep == "3")
+            {
+                Logger.LogInformation("[NextStep] Step 3: Pricing room...");
+                // Save both room + layers before pricing
+                await SaveRoom();
+                await SaveRoomSurfacesAndLayers();
+
+                var roomPrice = await PricingService.PriceRoomInteriorAsync(selectedRoom.Id);
+                Logger.LogInformation("[NextStep] Room priced. Response: {RoomPrice}", roomPrice);
+
+                await ReloadRoom();
+
+                // Reload VMs from DB so UI stays in sync
+                await LoadSurfacesVm();
+            }
+
+            Logger.LogInformation("[NextStep] Advancing to next step...");
+            await stepsRef.NextStep();
+            Logger.LogInformation("[NextStep] Advanced successfully. New step should be visible.");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[NextStep] ERROR occurred in step {Step}: {Message}", selectedStep, ex.Message);
+            Logger.LogError(ex, "[NextStep] Stack trace: {StackTrace}", ex.StackTrace);
+            throw; // Re-throw to make the error visible
+        }
+    }
+
+    private async Task FinalStep()
+    {
+        try
+        {
+            NavigationManager.NavigateTo($"pricing/projectentrymain/{ProjectId}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[FinalStep] An error occurred: {Message}", ex.Message);
+        }
+    }
+
+    public async Task Cancel()
+    {
+        try
+        {
+            if (newRoom && selectedRoom.Id > 0)
+                await PricingService.DeleteRoomAsync(selectedRoom.Id);
+
+            NavigationManager.NavigateTo($"pricing/projectentrymain/{ProjectId}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[Cancel] An error occurred: {Message}", ex.Message);
+        }
+    }
+
+    // ----------------------------
+    // Data loading
+    // ----------------------------
+    public async Task LoadData()
+    {
+        if (string.IsNullOrWhiteSpace(ProjectId) || string.IsNullOrWhiteSpace(AreaId))
+            return;
+
+        var project = await PricingService.GetCustomerProjectAsync(ProjectId);
+        var cust = await PricingService.GetCompanyCustomerAsync(project.CompanyCustomerGuidId.ToString());
+        CompanyGuid = cust?.CompanyId.ToString() ?? string.Empty;
+
+        companyPaintTypes = !string.IsNullOrWhiteSpace(CompanyGuid)
+            ? await PricingService.GetAllCompanyPaintTypesAsync(CompanyGuid)
+            : new List<CompanyPaintType>();
+
+        paintQualities = await PricingService.GetAllPaintQualitiesAsync();
+
+        if (AreaId == "0" && selectedRoom.Id == 0)
+        {
+            newRoom = true;
+            var globalRoomDefaults = await PricingService.GetRoomGlobalDefaultsAsync();
+            var companyRoomDefaults = await PricingService.GetCompanyDefaultsAsync(CompanyGuid);
+
+            selectedRoom = new Room
+            {
+                ProjectDataId = project.Id,
+                ProjectGuid = project.ProjectGuid,
+                Length = globalRoomDefaults.Length,
+                Width = globalRoomDefaults.Width,
+                Height = globalRoomDefaults.Height,
+                NumberOfDoors = IsExteriorMode ? 1 : globalRoomDefaults.NumberOfDoors,
+                NumberOfWindows = IsExteriorMode ? 0 : 1,
+                IncludeCeilings = IsExteriorMode ? false : (companyRoomDefaults?.Ceilings ?? true),
+                IncludeBaseboards = IsExteriorMode ? false : (companyRoomDefaults?.Baseboards ?? true),
+                IncludeCrownMoldings = false,
+                PaintQualityId = globalRoomDefaults.PaintQualityId,
+                IncludeDoors = IsExteriorMode ? true : (companyRoomDefaults?.Doors ?? true),
+                IncludeWalls = true,
+                IncludeWindows = IsExteriorMode ? false : (companyRoomDefaults?.Windows ?? true),
+                AdditionalPrepTime = 0.5f,
+                Name = IsExteriorMode ? "Building Exterior" : "Bedroom",
+                Notes = "",
+                AreaTotal = 0,
+                IsOptional = false,
+                LaborCost = 0,
+                MaterialCost = 0,
+                OverheadCost = 0,
+                Profit = 0,
+                PictureId = 0,
+
+                // legacy defaults (kept for compatibility; new feature uses surfacesVm)
+                WallsPaintTypeId = companyRoomDefaults?.PaintTypeWallsId ?? 0,
+                WallsCoats = 2,
+                CeilingPaintTypeId = companyRoomDefaults?.PaintTypeCeilingsId ?? 0,
+                CeilingCoats = 2,
+                BaseboardsPaintTypeId = companyRoomDefaults?.PaintTypeBaseboardsId ?? 0,
+                BaseboardsCoats = 2,
+                DoorsPaintTypeId = companyRoomDefaults?.PaintTypeTrimDoorsId ?? 0,
+                DoorsCoats = 2,
+                WindowsPaintTypeId = companyRoomDefaults?.PaintTypeWindowsId ?? 0,
+                WindowsCoats = 2,
+            };
+        }
+        else if (int.TryParse(AreaId, out var areaIdInt) && areaIdInt > 0)
+        {
+            selectedRoom = await PricingService.GetRoomAsync(areaIdInt);
+        }
+
+        compareRoom = selectedRoom.Clone();
+
+        // NEW: surfaces+layers
+        if (selectedRoom.Id > 0)
+            await LoadSurfacesVm();
+        else
+            BuildSurfacesVmFromLegacyOnly(); // new room not saved yet
+
+        StateHasChanged();
+    }
+
+    public async Task ReloadRoom()
+    {
+        selectedRoom = await PricingService.GetRoomAsync(selectedRoom.Id);
+        compareRoom = selectedRoom.Clone();
+    }
+
+    public async Task SaveRoom()
+    {
+        if (compareRoom.Equals(selectedRoom) && selectedRoom.Id > 0)
+            return;
+
+        selectedRoom.AreaTotal = selectedRoom.Length * selectedRoom.Width;
+
+        if (selectedRoom.Id == 0)
+            selectedRoom = await PricingService.CreateRoomAsync(selectedRoom);
+        else
+            await PricingService.UpdateRoomAsync(selectedRoom);
+
+        compareRoom = selectedRoom.Clone();
+    }
+
+    // ----------------------------
+    // NEW: Load/build surfaces + layers
+    // Uses only methods available in your IPricingService:
+    //  - GetAllRoomSurfacesAsync / GetAllRoomSurfacePaintLayersAsync
+    //  - Create/Update/Delete RoomSurface + RoomSurfacePaintLayer
+    // ----------------------------
+    private async Task LoadSurfacesVm()
+    {
+        var allSurfaces = await PricingService.GetAllRoomSurfacesAsync();
+        var roomSurfaces = allSurfaces.Where(s => s.RoomId == selectedRoom.Id).ToList();
+
+        var allLayers = await PricingService.GetAllRoomSurfacePaintLayersAsync();
+
+        surfacesVm = new();
+
+        foreach (var st in CanonicalSurfaceTypes())
+        {
+            var vm = new SurfaceVm { SurfaceType = st };
+
+            vm.Included = st switch
+            {
+                SurfaceType.Walls => selectedRoom.IncludeWalls,
+                SurfaceType.Ceiling => selectedRoom.IncludeCeilings,
+                SurfaceType.Baseboards => selectedRoom.IncludeBaseboards,
+                SurfaceType.Windows => selectedRoom.IncludeWindows,
+                SurfaceType.Doors => selectedRoom.IncludeDoors,
+                _ => false
+            };
+
+            ApplySurfaceGeometry(vm, selectedRoom);
+
+            var match = roomSurfaces.FirstOrDefault(s => (SurfaceType)s.SurfaceType == st);
+            if (match != null)
+            {
+                vm.RoomSurfaceId = match.RoomSurfaceId;
+                vm.AreaSqFt = match.AreaSqFt;
+                vm.LinearFt = match.LinearFt;
+
+                vm.Layers = allLayers
+                    .Where(l => l.RoomSurfaceId == match.RoomSurfaceId)
+                    .OrderBy(l => l.SortOrder)
+                    .Select(l => new LayerVm
+                    {
+                        RoomSurfacePaintLayerId = l.RoomSurfacePaintLayerId,
+                        LayerType = (PaintLayerType)l.LayerType,
+                        PaintTypeId = l.PaintTypeId,
+                        Coats = l.Coats,
+                        WasteFactor = l.WasteFactor,
+                        SortOrder = l.SortOrder
+                    })
+                    .ToList();
+
+                // If surface exists but no layers yet, bootstrap 1 layer from legacy defaults
+                if (vm.Layers.Count == 0)
+                    vm.Layers = BuildDefaultLayersFromLegacy(st);
+            }
+            else
+            {
+                // No DB surface yet -> build from legacy defaults (1 finish layer)
+                vm.Layers = BuildDefaultLayersFromLegacy(st);
+            }
+
+            surfacesVm.Add(vm);
+        }
+    }
+
+    private void BuildSurfacesVmFromLegacyOnly()
+    {
+        surfacesVm = new();
+        foreach (var st in CanonicalSurfaceTypes())
+        {
+            var vm = new SurfaceVm { SurfaceType = st };
+
+            vm.Included = st switch
+            {
+                SurfaceType.Walls => selectedRoom.IncludeWalls,
+                SurfaceType.Ceiling => selectedRoom.IncludeCeilings,
+                SurfaceType.Baseboards => selectedRoom.IncludeBaseboards,
+                SurfaceType.Windows => selectedRoom.IncludeWindows,
+                SurfaceType.Doors => selectedRoom.IncludeDoors,
+                _ => false
+            };
+
+            ApplySurfaceGeometry(vm, selectedRoom);
+            vm.Layers = BuildDefaultLayersFromLegacy(st);
+
+            surfacesVm.Add(vm);
+        }
+    }
+
+    private IEnumerable<SurfaceType> CanonicalSurfaceTypes()
+    {
+        if (IsExteriorMode)
+        {
+            // Exterior mode: only walls and doors
+            yield return SurfaceType.Walls;
+            yield return SurfaceType.Doors;
+        }
+        else
+        {
+            // Room mode: all surfaces
+            yield return SurfaceType.Walls;
+            yield return SurfaceType.Ceiling;
+            yield return SurfaceType.Baseboards;
+            yield return SurfaceType.Windows;
+            yield return SurfaceType.Doors;
+        }
+    }
+
+    private void ApplySurfaceGeometry(SurfaceVm vm, Room room)
+    {
+        var perimeter = 2m * ((decimal)room.Length + (decimal)room.Width);
+        var height = (decimal)room.Height;
+        var ceilingArea = (decimal)room.Length * (decimal)room.Width;
+
+        switch (vm.SurfaceType)
+        {
+            case SurfaceType.Walls:
+                vm.AreaSqFt = perimeter * height; // (optionally subtract doors/windows later)
+                vm.LinearFt = null;
+                break;
+
+            case SurfaceType.Ceiling:
+                vm.AreaSqFt = ceilingArea;
+                vm.LinearFt = null;
+                break;
+
+            case SurfaceType.Baseboards:
+                vm.LinearFt = perimeter;
+                vm.AreaSqFt = perimeter * (BaseboardFaceInchesDefault / 12m); // default 4"
+                break;
+
+            case SurfaceType.Doors:
+                vm.AreaSqFt = 0m;  // compute by door size rules later
+                vm.LinearFt = null;
+                break;
+
+            case SurfaceType.Windows:
+                vm.AreaSqFt = 0m;  // compute by window trim rules later
+                vm.LinearFt = null;
+                break;
+        }
+    }
+
+    private List<LayerVm> BuildDefaultLayersFromLegacy(SurfaceType st)
+    {
+        int? paintTypeId = st switch
+        {
+            SurfaceType.Walls => selectedRoom.WallsPaintTypeId > 0 ? selectedRoom.WallsPaintTypeId : null,
+            SurfaceType.Ceiling => selectedRoom.CeilingPaintTypeId > 0 ? selectedRoom.CeilingPaintTypeId : null,
+            SurfaceType.Baseboards => selectedRoom.BaseboardsPaintTypeId > 0 ? selectedRoom.BaseboardsPaintTypeId : null,
+            SurfaceType.Doors => selectedRoom.DoorsPaintTypeId > 0 ? selectedRoom.DoorsPaintTypeId : null,
+            SurfaceType.Windows => selectedRoom.WindowsPaintTypeId > 0 ? selectedRoom.WindowsPaintTypeId : null,
+            _ => null
+        };
+
+        var coats = st switch
+        {
+            SurfaceType.Walls => selectedRoom.WallsCoats.HasValue && selectedRoom.WallsCoats.Value > 0 ? (decimal)selectedRoom.WallsCoats.Value : 2m,
+            SurfaceType.Ceiling => selectedRoom.CeilingCoats.HasValue && selectedRoom.CeilingCoats.Value > 0 ? (decimal)selectedRoom.CeilingCoats.Value : 2m,
+            SurfaceType.Baseboards => selectedRoom.BaseboardsCoats.HasValue && selectedRoom.BaseboardsCoats.Value > 0 ? (decimal)selectedRoom.BaseboardsCoats.Value : 2m,
+            SurfaceType.Doors => selectedRoom.DoorsCoats.HasValue && selectedRoom.DoorsCoats.Value > 0 ? (decimal)selectedRoom.DoorsCoats.Value : 2m,
+            SurfaceType.Windows => selectedRoom.WindowsCoats.HasValue && selectedRoom.WindowsCoats.Value > 0 ? (decimal)selectedRoom.WindowsCoats.Value : 2m,
+            _ => 2m
+        };
+
+        return new List<LayerVm>
+        {
+            new LayerVm
+            {
+                LayerType = PaintLayerType.Finish,
+                PaintTypeId = paintTypeId,
+                Coats = coats,
+                WasteFactor = 0.10m,
+                SortOrder = 1
+            }
+        };
+    }
+
+    // ----------------------------
+    // NEW: Save surfaces + layers via existing CRUD endpoints
+    // ----------------------------
+    private async Task SaveRoomSurfacesAndLayers()
+    {
+        if (selectedRoom.Id <= 0)
+            return;
+
+        // Load current DB state (room scope) so we can diff/create/update/delete
+        var allSurfaces = await PricingService.GetAllRoomSurfacesAsync();
+        var dbRoomSurfaces = allSurfaces.Where(s => s.RoomId == selectedRoom.Id).ToList();
+
+        var allLayers = await PricingService.GetAllRoomSurfacePaintLayersAsync();
+
+        foreach (var sVm in surfacesVm)
+        {
+            var dbSurface = dbRoomSurfaces.FirstOrDefault(s => (SurfaceType)s.SurfaceType == sVm.SurfaceType);
+
+            // If not included => delete surface + its layers (if present)
+            if (!sVm.Included)
+            {
+                if (dbSurface != null)
+                {
+                    var dbLayers = allLayers.Where(l => l.RoomSurfaceId == dbSurface.RoomSurfaceId).ToList();
+                    foreach (var l in dbLayers)
+                        await PricingService.DeleteRoomSurfacePaintLayerAsync(l.RoomSurfacePaintLayerId);
+
+                    await PricingService.DeleteRoomSurfaceAsync(dbSurface.RoomSurfaceId);
+                }
+
+                sVm.RoomSurfaceId = null;
+                continue;
+            }
+
+            // Ensure surface exists
+            if (dbSurface == null)
+            {
+                dbSurface = new RoomSurface
+                {
+                    RoomId = selectedRoom.Id,
+                    SurfaceType = (byte)sVm.SurfaceType,
+                    AreaSqFt = sVm.AreaSqFt,
+                    LinearFt = sVm.LinearFt,
+                    Quantity = null,
+                    Notes = null,
+                    CreatedUtc = DateTime.UtcNow,
+                    UpdatedUtc = DateTime.UtcNow
+                };
+
+                await PricingService.CreateRoomSurfaceAsync(dbSurface);
+
+                // Re-fetch just-created surface ID (since Create returns Task not Task<T>)
+                allSurfaces = await PricingService.GetAllRoomSurfacesAsync();
+                dbRoomSurfaces = allSurfaces.Where(x => x.RoomId == selectedRoom.Id).ToList();
+                dbSurface = dbRoomSurfaces.First(x => (SurfaceType)x.SurfaceType == sVm.SurfaceType);
+            }
+            else
+            {
+                // Update geometry if it changed
+                dbSurface.AreaSqFt = sVm.AreaSqFt;
+                dbSurface.LinearFt = sVm.LinearFt;
+                dbSurface.UpdatedUtc = DateTime.UtcNow;
+                await PricingService.UpdateRoomSurfaceAsync(dbSurface);
+            }
+
+            sVm.RoomSurfaceId = dbSurface.RoomSurfaceId;
+
+            // Sync layers for this surface
+            var dbLayersForSurface = allLayers.Where(l => l.RoomSurfaceId == dbSurface.RoomSurfaceId).ToList();
+
+            // delete missing
+            var vmIds = sVm.Layers.Where(x => x.RoomSurfacePaintLayerId.HasValue).Select(x => x.RoomSurfacePaintLayerId!.Value).ToHashSet();
+            foreach (var dbL in dbLayersForSurface)
+            {
+                if (!vmIds.Contains(dbL.RoomSurfacePaintLayerId))
+                    await PricingService.DeleteRoomSurfacePaintLayerAsync(dbL.RoomSurfacePaintLayerId);
+            }
+
+            // upsert
+            foreach (var layerVm in sVm.Layers)
+            {
+                if (layerVm.RoomSurfacePaintLayerId == null || layerVm.RoomSurfacePaintLayerId.Value == 0)
+                {
+                    var newLayer = new RoomSurfacePaintLayer
+                    {
+                        RoomSurfaceId = dbSurface.RoomSurfaceId,
+                        PaintTypeId = layerVm.PaintTypeId,
+                        LayerType = (byte)layerVm.LayerType,
+                        Coats = layerVm.Coats <= 0 ? 1m : layerVm.Coats,
+                        WasteFactor = layerVm.WasteFactor,
+                        SortOrder = layerVm.SortOrder,
+                        GallonsCalculated = 0m,
+                        CostCalculated = 0m,
+                        Notes = null,
+                        CreatedUtc = DateTime.UtcNow,
+                        UpdatedUtc = DateTime.UtcNow
+                    };
+
+                    await PricingService.CreateRoomSurfacePaintLayerAsync(newLayer);
+                }
+                else
+                {
+                    var existing = dbLayersForSurface.FirstOrDefault(x => x.RoomSurfacePaintLayerId == layerVm.RoomSurfacePaintLayerId.Value);
+                    if (existing == null)
+                        continue;
+
+                    existing.PaintTypeId = layerVm.PaintTypeId;
+                    existing.LayerType = (byte)layerVm.LayerType;
+                    existing.Coats = layerVm.Coats <= 0 ? 1m : layerVm.Coats;
+                    existing.WasteFactor = layerVm.WasteFactor;
+                    existing.SortOrder = layerVm.SortOrder;
+                    existing.UpdatedUtc = DateTime.UtcNow;
+
+                    await PricingService.UpdateRoomSurfacePaintLayerAsync(existing);
+                }
+            }
+
+            // Refresh layers list IDs after inserts (optional but keeps UI stable)
+            allLayers = await PricingService.GetAllRoomSurfacePaintLayersAsync();
+            dbLayersForSurface = allLayers.Where(l => l.RoomSurfaceId == dbSurface.RoomSurfaceId).ToList();
+            sVm.Layers = dbLayersForSurface
+                .OrderBy(l => l.SortOrder)
+                .Select(l => new LayerVm
+                {
+                    RoomSurfacePaintLayerId = l.RoomSurfacePaintLayerId,
+                    LayerType = (PaintLayerType)l.LayerType,
+                    PaintTypeId = l.PaintTypeId,
+                    Coats = l.Coats,
+                    WasteFactor = l.WasteFactor,
+                    SortOrder = l.SortOrder
+                })
+                .ToList();
+        }
+
+        // Mirror Included flags back into Room for compatibility (optional, but recommended)
+        // Use FirstOrDefault to handle cases where certain surfaces don't exist (e.g., exterior mode)
+        selectedRoom.IncludeWalls = surfacesVm.FirstOrDefault(x => x.SurfaceType == SurfaceType.Walls)?.Included ?? false;
+        selectedRoom.IncludeCeilings = surfacesVm.FirstOrDefault(x => x.SurfaceType == SurfaceType.Ceiling)?.Included ?? false;
+        selectedRoom.IncludeBaseboards = surfacesVm.FirstOrDefault(x => x.SurfaceType == SurfaceType.Baseboards)?.Included ?? false;
+        selectedRoom.IncludeWindows = surfacesVm.FirstOrDefault(x => x.SurfaceType == SurfaceType.Windows)?.Included ?? false;
+        selectedRoom.IncludeDoors = surfacesVm.FirstOrDefault(x => x.SurfaceType == SurfaceType.Doors)?.Included ?? false;
+
+        // You can optionally mirror FIRST Finish layer back to legacy PaintTypeId/Coats if your pricing code still reads Room.* fields.
+        MirrorFirstFinishLayerToLegacyRoomFields();
+
+        await PricingService.UpdateRoomAsync(selectedRoom);
+        compareRoom = selectedRoom.Clone();
+    }
+
+    private void MirrorFirstFinishLayerToLegacyRoomFields()
+    {
+        void Apply(SurfaceType st, Action<int, int> set)
+        {
+            var s = surfacesVm.FirstOrDefault(x => x.SurfaceType == st && x.Included);
+            var finish = s?.Layers
+                .OrderBy(l => l.SortOrder)
+                .FirstOrDefault(l => l.LayerType == PaintLayerType.Finish);
+
+            var paintId = finish?.PaintTypeId ?? 0;
+            var coats = finish != null ? (int)finish.Coats : 2;
+
+            set(paintId, coats);
+        }
+
+        Apply(SurfaceType.Walls, (id, coats) => { selectedRoom.WallsPaintTypeId = id; selectedRoom.WallsCoats = coats; });
+        Apply(SurfaceType.Ceiling, (id, coats) => { selectedRoom.CeilingPaintTypeId = id; selectedRoom.CeilingCoats = coats; });
+        Apply(SurfaceType.Baseboards, (id, coats) => { selectedRoom.BaseboardsPaintTypeId = id; selectedRoom.BaseboardsCoats = coats; });
+        Apply(SurfaceType.Windows, (id, coats) => { selectedRoom.WindowsPaintTypeId = id; selectedRoom.WindowsCoats = coats; });
+        Apply(SurfaceType.Doors, (id, coats) => { selectedRoom.DoorsPaintTypeId = id; selectedRoom.DoorsCoats = coats; });
+    }
+
+    // ----------------------------
+    // UI layer helpers
+    // ----------------------------
+    private void AddLayer(SurfaceVm s)
+    {
+        var nextSort = s.Layers.Any() ? s.Layers.Max(x => x.SortOrder) + 1 : 1;
+
+        s.Layers.Add(new LayerVm
+        {
+            LayerType = PaintLayerType.Finish,
+            PaintTypeId = null,
+            Coats = 2m,
+            WasteFactor = 0.10m,
+            SortOrder = nextSort
+        });
+    }
+
+    private void RemoveLayer(SurfaceVm s, LayerVm layer)
+    {
+        s.Layers.Remove(layer);
+
+        var i = 1;
+        foreach (var l in s.Layers.OrderBy(x => x.SortOrder))
+            l.SortOrder = i++;
+    }
+
+    // ----------------------------
+    // Modal
+    // ----------------------------
+    private void ShowModal() => ShowPopup = true;
+    private void HideModal() => ShowPopup = false;
+
+    // ----------------------------
+    // Logging wrapper
+    // ----------------------------
+    private async Task LogAndExecute(string actionName, Func<Task> action)
+    {
+        try
+        {
+            Logger.LogInformation("[{ActionName}] Button clicked. Current Step: {SelectedStep}, ProjectId: {ProjectId}, AreaId: {AreaId}",
+                actionName, selectedStep, ProjectId, AreaId);
+
+            if (action != null)
+                await action.Invoke();
+
+            Logger.LogInformation("[{ActionName}] Action completed successfully.", actionName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[{ActionName}] An error occurred: {Message}", actionName, ex.Message);
+        }
+    }
+}

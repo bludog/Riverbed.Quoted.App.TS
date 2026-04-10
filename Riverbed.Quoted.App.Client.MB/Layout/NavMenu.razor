@@ -1,7 +1,13 @@
+@using MudBlazor
+
 <MudNavMenu>
     <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
     <AuthorizeView>
         <Authorized>
+            <MudNavLink Href="project/quoted-projects" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Workspaces">Quoted Projects</MudNavLink>
+            <MudNavLink Href="users" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+            <MudNavLink Href="emaileditor" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Email">Email Editor</MudNavLink>
+            <MudNavLink Href="companyhtmlreportscomponent" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Description">Company Reports</MudNavLink>
             <MudNavLink Href="counter" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Add">Counter</MudNavLink>
         </Authorized>
     </AuthorizeView>

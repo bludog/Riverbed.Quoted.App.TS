@@ -1,0 +1,91 @@
+@page "/PricingType"
+@inject HttpClient Http
+@inject ILogger<PricingTypeComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator>
+    <DxGrid Data="@PricingTypes"
+            EditModelSaving="@Grid_EditModelSaving"
+            DataItemDeleting="@Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="PricingTypeName" Caption="Pricing Type"/>
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var newPricingType = (PricingType)EditFormContext.EditModel;
+            }
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Pricing Type Name">
+                    <DxTextBox @bind-Text="@newPricingType.PricingTypeName" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </EditFormTemplate>
+    </DxGrid>
+</LoadingIndicator>
+
+
+@code {
+    public PricingType pricingType { get; set; } = new PricingType();
+    public bool isBusy { get; set; } = false;
+    public List<PricingType> PricingTypes { get; set; }
+    private IPricingService pricingService;
+
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        await UpdateDataAsync();
+    }
+
+    async Task UpdateDataAsync()
+    {
+        isBusy = true;
+        PricingTypes = await pricingService.GetAllPricingTypesAsync();
+        isBusy = false;
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        isBusy = true;
+        if (e.EditModel is PricingType pricingType)
+        {
+            if (pricingType.Id == 0)
+            {
+                await pricingService.CreatePricingTypeAsync(pricingType);
+            }
+            else
+            {
+                await pricingService.UpdatePricingTypeAsync(pricingType);
+            }
+        }
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        isBusy = true;
+        if (e.DataItem is PricingType pricingType)
+        {
+            await pricingService.DeletePricingTypeAsync(pricingType.Id);
+        }
+        await UpdateDataAsync();
+    }
+
+}

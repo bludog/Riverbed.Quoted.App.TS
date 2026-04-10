@@ -1,0 +1,64 @@
+@page "/utils/company-admin"
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Entities
+@inject IPricingService PricingService
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Project Admin</PageTitle>
+
+<h3>Company Administration</h3>
+
+@if (isLoading)
+{
+    <p>Loading companies...</p>
+}
+else if (companies?.Any() == true)
+{
+    <div class="mb-3">
+        <Blazorise.Field>
+            <Blazorise.Label for="companySelect">Select Company:</Blazorise.Label>
+            <Blazorise.Select TValue="Guid" @bind-SelectedValue="selectedCompanyId" Id="companySelect">
+                <Blazorise.SelectItem Value="Guid.Empty">-- Select a company --</Blazorise.SelectItem>
+                @foreach (var company in companies)
+                {
+                    <Blazorise.SelectItem Value="@company.Id">@company.CompanyName</Blazorise.SelectItem>
+                }
+            </Blazorise.Select>
+        </Blazorise.Field>
+        @if (selectedCompanyId != Guid.Empty)
+        {
+            <DeleteCompanyCustomerUtility CompanyGuid="@selectedCompanyId" @key="GetDeleteKey(selectedCompanyId)" />
+            <CopyGlobalCompanyHTMLReportTemplates CompanyGuid="@selectedCompanyId" @key="GetCopyGlobalKey(selectedCompanyId)" />
+            <CompanyInteriorPricingComponent CompanyGuid="@selectedCompanyId" @key="GetInteriorPricingKey(selectedCompanyId)" />
+        }
+    </div>
+    @if (selectedCompanyId != Guid.Empty)
+    {
+        <ProjectAdminFunctionsComponent CompanyId="selectedCompanyId" />
+        
+    }
+}
+else
+{
+    <p>No companies found.</p>
+}
+
+@functions {
+    private string GetDeleteKey(Guid id) => $"delete-{id}";
+    private string GetCopyGlobalKey(Guid id) => $"copyglobal-{id}";
+    private string GetInteriorPricingKey(Guid id) => $"defaults-{id}";
+}
+
+@code {
+    private List<Company> companies;
+    private Guid selectedCompanyId = Guid.Empty;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        companies = await PricingService.GetAllCompaniesAsync();
+        isLoading = false;
+    }
+}

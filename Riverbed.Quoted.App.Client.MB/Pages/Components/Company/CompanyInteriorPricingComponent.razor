@@ -1,0 +1,116 @@
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Entities
+@inject IPricingService PricingService
+@rendermode InteractiveWebAssembly
+
+<Blazorise.Card>
+    <Blazorise.CardHeader>
+        <strong>Company Interior Pricing</strong>
+    </Blazorise.CardHeader>
+    <Blazorise.CardBody>
+        @if (isLoading)
+        {
+            <Blazorise.LoadingIndicator Visible="true" />
+        }
+        else if (interiorDefaults == null)
+        {
+            <div class="alert alert-warning">No interior pricing data found for this company.</div>
+        }
+        else
+        {
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <th>Wall Rate Per SqFt</th>
+                        <td>@interiorDefaults.WallRatePerSquareFoot</td>
+                    </tr>
+                    <tr>
+                        <th>Ceiling Rate Per SqFt</th>
+                        <td>@interiorDefaults.CeilingRatePerSquareFoot</td>
+                    </tr>
+                    <tr>
+                        <th>Door Rate Each</th>
+                        <td>@interiorDefaults.DoorRateEach</td>
+                    </tr>
+                    <tr>
+                        <th>Baseboard Rate Per Linear Foot</th>
+                        <td>@interiorDefaults.BaseboardRatePerLinearFoot</td>
+                    </tr>
+                    <tr>
+                        <th>Crown Molding Rate Per Linear Foot</th>
+                        <td>@interiorDefaults.CrownMoldingRatePerLinearFoot</td>
+                    </tr>
+                    <tr>
+                        <th>Paint Coverage Per Gallon</th>
+                        <td>@interiorDefaults.PaintCoveragePerGallon</td>
+                    </tr>
+                    <tr>
+                        <th>Paint Coats</th>
+                        <td>@interiorDefaults.PaintCoats</td>
+                    </tr>
+                </tbody>
+            </table>
+        }
+    </Blazorise.CardBody>
+    <Blazorise.CardFooter>
+        <Blazorise.Button Color="Color.Primary" Disabled="isLoading || isResetting" Clicked="ResetInteriorPricing">Reset to Defaults</Blazorise.Button>
+        @if (!string.IsNullOrEmpty(statusMessage))
+        {
+            <span class="ms-3">@statusMessage</span>
+        }
+    </Blazorise.CardFooter>
+</Blazorise.Card>
+
+@code {
+    [Parameter]
+    public Guid CompanyGuid { get; set; }
+
+    private PricingInteriorDefault? interiorDefaults;
+    private bool isLoading = true;
+    private bool isResetting = false;
+    private string? statusMessage;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadInteriorDefaults();
+    }
+
+    private async Task LoadInteriorDefaults()
+    {
+        isLoading = true;
+        statusMessage = null;
+        try
+        {
+            var allDefaults = await PricingService.GetAllPricingInteriorDefaultsAsync();
+            interiorDefaults = allDefaults.FirstOrDefault(x => x.CompanyId == CompanyGuid);
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ResetInteriorPricing()
+    {
+        isResetting = true;
+        statusMessage = null;
+        try
+        {
+            await PricingService.SetCompanyInteriorPricingAsync(CompanyGuid.ToString());
+            await LoadInteriorDefaults();
+            statusMessage = "Interior pricing reset to defaults.";
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Error resetting: {ex.Message}";
+        }
+        finally
+        {
+            isResetting = false;
+        }
+    }
+}

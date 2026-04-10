@@ -1,0 +1,368 @@
+@using Blazorise
+@using Riverbed.Pricing.Paint.Entities
+@using Riverbed.Pricing.Paint.Shared.Services
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazorise.LoadingIndicator
+@using System.Net.Http.Json
+
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILogger<ServiceTitanConnectionDataEditForm> Logger
+@inject IPricingService PricingService
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveWebAssembly
+
+<Card Margin="Margin.Is4">
+    <CardHeader>
+        <CardTitle>@(IsNewConnection ? "Configure Service Titan Connection" : "Edit Service Titan Connection")</CardTitle>
+    </CardHeader>
+    <CardBody>
+        @if (!string.IsNullOrEmpty(StatusMessage))
+        {
+            <Alert Color="@(StatusMessage.StartsWith("Error") ? Color.Danger : Color.Success)" Margin="Margin.Is3.FromBottom">
+                @StatusMessage
+            </Alert>
+        }
+
+        <LoadingIndicator @bind-Visible="@IsBusy">
+            <EditForm Model="@ConnectionData" OnValidSubmit="@SaveConnectionData">
+                <DataAnnotationsValidator />
+                <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+
+                <Row Margin="Margin.Is3.FromBottom">
+                    <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                        <Field>
+                            <FieldLabel For="companyName">Company Name</FieldLabel>
+                            <TextEdit id="companyName" @bind-Text="ConnectionData.CompanyName" />
+                            <ValidationMessage For="@(() => ConnectionData.CompanyName)" />
+                        </Field>
+                    </Column>
+                    <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                        <Field>
+                            <FieldLabel For="tenantId">Tenant ID</FieldLabel>
+                            <NumericEdit id="tenantId" @bind-Value="ConnectionData.ServiceTitanTenantId" />
+                            <ValidationMessage For="@(() => ConnectionData.ServiceTitanTenantId)" />
+                        </Field>
+                    </Column>
+                </Row>
+
+                @if (CanEditAllFields && !IsNewConnection)
+                {
+                    <Row Margin="Margin.Is3.FromBottom">
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="apiUrl">API URL</FieldLabel>
+                                <TextEdit id="apiUrl" @bind-Text="ConnectionData.ServiceTitanApiUrl" />
+                                <ValidationMessage For="@(() => ConnectionData.ServiceTitanApiUrl)" />
+                            </Field>
+                        </Column>
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="apiVersion">API Version</FieldLabel>
+                                <TextEdit id="apiVersion" @bind-Text="ConnectionData.ServiceTitanApiVersion" />
+                                <ValidationMessage For="@(() => ConnectionData.ServiceTitanApiVersion)" />
+                            </Field>
+                        </Column>
+                    </Row>
+
+                    <Row Margin="Margin.Is3.FromBottom">
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="clientId">Client ID</FieldLabel>
+                                <TextEdit id="clientId" @bind-Text="ServiceTitanClientId" />
+                            </Field>
+                        </Column>
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="secretKey">Secret Key</FieldLabel>
+                                <TextEdit id="secretKey" Role="TextRole.Password" @bind-Text="ConnectionData.ServiceTitanSecretKey" />
+                                <ValidationMessage For="@(() => ConnectionData.ServiceTitanSecretKey)" />
+                            </Field>
+                        </Column>
+                    </Row>
+
+                    <Row Margin="Margin.Is3.FromBottom">
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="appKey">App Key</FieldLabel>
+                                <TextEdit id="appKey" @bind-Text="ConnectionData.ServiceTitanAppKey" />
+                                <ValidationMessage For="@(() => ConnectionData.ServiceTitanAppKey)" />
+                            </Field>
+                        </Column>
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <FieldLabel For="timeInterval">Sync Interval (seconds)</FieldLabel>
+                                <NumericEdit id="timeInterval" @bind-Value="ConnectionData.TimeIntervalInSeconds" />
+                                <ValidationMessage For="@(() => ConnectionData.TimeIntervalInSeconds)" />
+                            </Field>
+                        </Column>
+                    </Row>
+
+                    <Row Margin="Margin.Is3.FromBottom">
+                        <Column ColumnSize="ColumnSize.Is6.OnDesktop">
+                            <Field>
+                                <Check TValue="bool" @bind-Checked="ConnectionData.IsActive">
+                                    <ChildContent>
+                                        Active
+                                    </ChildContent>
+                                </Check>
+                            </Field>
+                        </Column>
+                    </Row>
+                }
+                else if (!IsNewConnection)
+                {
+                    <Alert Color="Color.Info" Margin="Margin.Is3.FromTop">
+                        <AlertDescription>
+                            You have limited access to edit ServiceTitan settings. Only company name and tenant ID can be modified.
+                        </AlertDescription>
+                    </Alert>
+                }
+
+                <Row Margin="Margin.Is3.FromTop">
+                    <Column ColumnSize="ColumnSize.Is12">
+                        <Button Type="Blazorise.ButtonType.Submit" 
+                                Color="Color.Primary"  >
+                            @(IsNewConnection ? "Create" : "Save")
+                        </Button>
+                        <Button Color="Color.Secondary" 
+                                Clicked="Reset" 
+                                Margin="Margin.Is2.FromStart">
+                            Reset
+                        </Button>
+                    </Column>
+                </Row>
+            </EditForm>
+
+            @if (CanEditAllFields && !IsNewConnection)
+            {
+                <Row Margin="Margin.Is3.FromTop">
+                    <Column>
+                        <Text Color="TextColor.Muted">
+                            Last sync: @(ConnectionData.LastSyncDate == default ? "Never" : ConnectionData.LastSyncDate.ToString("g"))
+                        </Text>
+                    </Column>
+                </Row>
+            }
+        </LoadingIndicator>
+
+        @if (isLoading)
+        {
+            <Div Display="Display.Flex" JustifyContent="JustifyContent.Center" Margin="Margin.Is4.FromTop">
+                <Spinner Size="SpinnerSize.Large" />
+            </Div>
+        }
+
+         <Div Display="Display.Flex" 
+         JustifyContent="JustifyContent.Center" 
+         Margin="Margin.Is4.FromTop">
+        <Spinner Size="SpinnerSize.Large" />
+    </Div>
+    </CardBody>
+</Card>
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; }
+
+    public ServiceTitanConnectionData ConnectionData { get; set; } = new ServiceTitanConnectionData();
+    public string ServiceTitanClientId { get; set; } = string.Empty;
+    public bool IsNewConnection { get; set; }
+    public bool IsBusy { get; set; } = false;
+    public bool IsAdmin { get; set; } = false;
+    public bool IsCompanyAdmin { get; set; } = false;
+    private bool CanEditAllFields => IsAdmin || IsCompanyAdmin;
+    public string StatusMessage { get; set; } = "Configure your ServiceTitan integration settings.";
+    private const string DefaultApiUrl = "https://auth-integration.servicetitan.io";
+    private const string DefaultApiVersion = "v2";
+    private bool isLoading = true;
+    private string userRoles = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            isLoading = true;
+            
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                // Check user roles through the PricingService
+                var roles = await PricingService.GetUserRolesAsync(user.Identity.Name);
+                IsAdmin = roles?.Any(r => 
+                    r.Equals("Administrator", StringComparison.OrdinalIgnoreCase) || 
+                    r.Equals("Admin", StringComparison.OrdinalIgnoreCase)) ?? false;
+
+                IsCompanyAdmin = roles?.Any(r =>
+                    r.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase)) ?? false;
+
+                userRoles = string.Join(", ", roles ?? new List<String>());
+                Logger.LogInformation($"User {user.Identity.Name} has roles: {userRoles}. Is Admin: {IsAdmin}, Is CompanyAdmin: {IsCompanyAdmin}");
+
+                // If CompanyGuid is not provided, try to get it from the user
+                if (string.IsNullOrEmpty(CompanyGuid))
+                {
+                    var userCompanyGuid = await PricingService.GetUserCompanyGuidAsync(user.Identity.Name);
+                    if (!string.IsNullOrEmpty(userCompanyGuid))
+                    {
+                        CompanyGuid = userCompanyGuid.Trim('"', '\'');
+                    }
+                }
+
+                await LoadConnectionData();
+            }
+            else
+            {
+                Logger.LogWarning("User is not authenticated");
+                NavigationManager.NavigateTo("/login", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during initialization");
+            StatusMessage = "Error initializing the form. Please refresh the page.";
+        }
+        finally
+        {
+            IsBusy = false;
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadConnectionData()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(CompanyGuid))
+            {
+                StatusMessage = "Error: Company GUID is required";
+                InitializeNewConnection();
+                return;
+            }
+
+            var data = await PricingService.GetServiceTitanConnectionDataAsync(CompanyGuid);
+            
+            if (data != null && data.Id > 0)
+            {
+                ConnectionData = data;
+                ServiceTitanClientId = data.ServiceTitanApiClientId ?? string.Empty;
+                IsNewConnection = false;
+                StatusMessage = "Existing ServiceTitan connection loaded.";
+                Logger.LogInformation($"Loaded connection data for company {data.CompanyName}");
+            }
+            else
+            {
+                InitializeNewConnection();
+                StatusMessage = "Please configure your ServiceTitan connection.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading ServiceTitan connection data");
+            StatusMessage = "Error loading connection data. Please try again.";
+            InitializeNewConnection();
+        }
+    }
+
+    private void InitializeNewConnection()
+    {
+        ConnectionData = new ServiceTitanConnectionData
+        {
+            ServiceTitanApiUrl = DefaultApiUrl,
+            ServiceTitanApiVersion = DefaultApiVersion,
+            TimeIntervalInSeconds = 3600,
+            IsActive = true,
+            CompanyGuid = !string.IsNullOrEmpty(CompanyGuid) ? Guid.Parse(CompanyGuid) : Guid.Empty
+        };
+        
+        ServiceTitanClientId = string.Empty;
+        IsNewConnection = true;
+    }
+
+    private async Task SaveConnectionData()
+    {
+        if (ConnectionData == null)
+        {
+            StatusMessage = "Error: No connection data available";
+            return;
+        }
+
+        try
+        {
+            IsBusy = true;
+            StatusMessage = "Saving...";
+            
+            ConnectionData.ServiceTitanApiClientId = ServiceTitanClientId;
+            
+            if (string.IsNullOrEmpty(CompanyGuid))
+            {
+                StatusMessage = "Error: Company GUID is missing";
+                return;
+            }
+
+            ConnectionData.CompanyGuid = Guid.Parse(CompanyGuid);
+            
+            ServiceTitanConnectionData result;
+            
+            if (IsNewConnection)
+            {
+                result = await PricingService.CreateServiceTitanConnectionDataAsync(ConnectionData);
+            }
+            else
+            {
+                if (!CanEditAllFields)
+                {
+                    var currentData = await PricingService.GetServiceTitanConnectionDataAsync(CompanyGuid);
+                    if (currentData != null)
+                    {
+                        currentData.CompanyName = ConnectionData.CompanyName;
+                        currentData.ServiceTitanTenantId = ConnectionData.ServiceTitanTenantId;
+                        result = await PricingService.UpdateServiceTitanConnectionDataAsync(currentData);
+                    }
+                    else
+                    {
+                        StatusMessage = "Error: Could not retrieve existing connection data";
+                        return;
+                    }
+                }
+                else
+                {
+                    result = await PricingService.UpdateServiceTitanConnectionDataAsync(ConnectionData);
+                }
+            }
+            
+            if (result != null)
+            {
+                ConnectionData = result;
+                ServiceTitanClientId = result.ServiceTitanApiClientId ?? string.Empty;
+                IsNewConnection = false;
+                StatusMessage = "ServiceTitan connection updated successfully";
+                Logger.LogInformation($"Successfully saved connection data for company {result.CompanyName}");
+            }
+            else
+            {
+                StatusMessage = $"Error {(IsNewConnection ? "creating" : "updating")} ServiceTitan connection";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving ServiceTitan connection data");
+            StatusMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Reset()
+    {
+        await LoadConnectionData();
+    }
+}

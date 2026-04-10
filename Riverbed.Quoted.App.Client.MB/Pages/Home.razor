@@ -1,18 +1,37 @@
 @page "/"
+@using MudBlazor
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ILoadingIndicatorService ApplicationLoadingIndicatorService
+@inject ILogger<Home> Logger
+@rendermode InteractiveWebAssembly
 
-<PageTitle>Home</PageTitle>
+<h1>Loading...</h1>
 
-<MudText Typo="Typo.h3" GutterBottom="true">Hello, world!</MudText>
-<MudText Class="mb-8">Welcome to your new app, powered by MudBlazor and the .NET 10 Template!</MudText>
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await ApplicationLoadingIndicatorService.Show();
+        Logger.LogInformation("Home.OnInitializedAsync LoadingIndicator.Show");
+    }
 
-<MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-6">
-    Authentication is wired up. Use the <b>Log in</b> action in the app bar to sign in.
-</MudAlert>
-
-
-<MudAlert Severity="Severity.Normal" ContentAlignment="HorizontalAlignment.Start">
-    You can find documentation and examples on our website here:
-    <MudLink Href="https://mudblazor.com" Target="_blank" Typo="Typo.body2" Color="Color.Primary">
-        <b>www.mudblazor.com</b>
-    </MudLink>
-</MudAlert>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+		Logger.BeginScope("Home.OnAfterRenderAsync");
+        if (firstRender)
+        {
+			Logger.LogInformation("Home.OnAfterRenderAsync firstRender");
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            if (!authState.User.Identity.IsAuthenticated)
+            {
+				Logger.LogInformation("Home.OnAfterRenderAsync User not authenticated, redirecting to Login");
+                NavigationManager.NavigateTo("/login", true);
+            }
+            else
+            {
+				Logger.LogInformation("Home.OnAfterRenderAsync User authenticated, redirecting to Quoted Projects");
+                NavigationManager.NavigateTo("dashboard");
+            }
+        }
+    }
+}

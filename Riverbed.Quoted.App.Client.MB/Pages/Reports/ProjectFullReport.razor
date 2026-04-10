@@ -1,0 +1,141 @@
+@page "/reports/projectfullreport/{ProjectId:guid}"
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Services
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@inject IPricingService PricingService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@layout NoMenuLayout
+@rendermode InteractiveWebAssembly
+
+<div class="container my-4 paper-center">
+    <div class="print-hide">
+        <Button Color="Color.Info" Size="Size.Small" Style="margin-bottom: 2rem;" @onclick="ExportPageToPdf">
+            <Icon Name="IconName.FilePdf" /> Print
+        </Button>
+    </div>
+
+    @if (_activeReportTypeIds is null)
+    {
+        <div class="text-center my-4">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else
+    {
+        @* Welcome (4) *@
+        @if (_activeReportTypeIds.Contains(4))
+        {
+            <div class="report-section mb-5">
+                <CompanyHTMLReportDisplayComponent ProjectGuid="@ProjectId" ReportTypeId="4" />
+            </div>
+        }
+
+        @* About Us (2) *@
+        @if (_activeReportTypeIds.Contains(2))
+        {
+            <div class="report-section mb-5">
+                <CompanyHTMLReportDisplayComponent ProjectGuid="@ProjectId" ReportTypeId="2" />
+            </div>
+        }
+        
+        @* Quote is not driven by HTML template list, keep always *@
+        <div class="report-section mb-5">
+            <ProjectQuoteReport ProjectId="@ProjectId" />
+        </div>
+
+        @* Agreement (1) *@
+        @if (_activeReportTypeIds.Contains(1))
+        {
+            <div class="report-section mb-5">
+                <CompanyHTMLReportDisplayComponent ProjectGuid="@ProjectId" ReportTypeId="1" />
+            </div>
+        }
+
+        @* Warranty (6) *@
+        @if (_activeReportTypeIds.Contains(6))
+        {
+            <div class="report-section mb-5">
+                <CompanyHTMLReportDisplayComponent ProjectGuid="@ProjectId" ReportTypeId="6" />
+            </div>
+        }
+
+        @* Signatures (5) *@
+        @if (_activeReportTypeIds.Contains(5))
+        {
+            <div class="report-section mb-5">
+                <CompanyHTMLReportDisplayComponent ProjectGuid="@ProjectId" ReportTypeId="5" />
+            </div>
+        }
+    }
+</div>
+
+<style>
+body, .container {
+    background: #fff !important;
+}
+.paper-center {
+    width: 8.27in;
+    min-height: 11.69in;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    box-shadow: 0 0 8px #ccc;
+    display: block;
+}
+.report-section {
+    background: #fff !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: avoid;
+}
+.print-hide {
+    display: block;
+}
+@@media print {
+    .print-hide { display: none !important; }
+    body, html { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+    .container, .paper-center, .pdf-container, .pdf-card, .pdf-card-body, .table-bordered, table {
+        width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
+        box-shadow: none !important; border: none !important;
+    }
+    .table-bordered th, .table-bordered thead tr, th { border-bottom: 1px solid #000 !important; }
+}
+</style>
+
+<script>
+    window.printPage = function() { window.print(); }
+</script>
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    private HashSet<int>? _activeReportTypeIds;
+
+    protected override async Task OnParametersSetAsync()
+    {       
+        try
+        {
+		var project = await PricingService.GetCustomerProjectAsync(ProjectId.ToString());
+        if (project is null)
+            {
+                NavigationManager.NavigateTo("/notfound");
+                return;
+			}
+			var customer = await PricingService.GetCompanyCustomerAsync(project.CompanyCustomerGuidId.ToString());
+            // Get active templates (company + global). Set GlobalOnly=false to include non-global active templates.
+            var minimal = await PricingService.GetActiveMinimalTemplateInfoAsync(customer.CompanyId.ToString(), GlobalOnly: true);
+            _activeReportTypeIds = minimal.Select(m => m.ReportTypeId).ToHashSet();
+        }
+        catch
+        {
+            _activeReportTypeIds = new HashSet<int>();
+        }        
+    }
+
+    private async Task ExportPageToPdf()
+    {
+        await JS.InvokeVoidAsync("printPage");
+    }
+}

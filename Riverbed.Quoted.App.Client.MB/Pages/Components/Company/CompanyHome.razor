@@ -1,0 +1,26 @@
+@page "/companyhome"
+
+@inject ILogger<CompanyHome> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+
+<Breadcrumb>
+    <BreadcrumbItem>
+        <Blazorise.BreadcrumbLink To="company-customer-list">Home</Blazorise.BreadcrumbLink>
+    </BreadcrumbItem>
+    <BreadcrumbItem>
+        <Blazorise.BreadcrumbLink To="company-customer-display">Customers</Blazorise.BreadcrumbLink>
+    </BreadcrumbItem>
+    <BreadcrumbItem>
+        <Blazorise.BreadcrumbLink To="company-customer-list">Customer List</Blazorise.BreadcrumbLink>
+    </BreadcrumbItem>
+</Breadcrumb>
+
+@code {
+
+}

@@ -1,9 +1,18 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Blazorise;
+using Blazorise.Bootstrap5;
+using Blazorise.Icons.FontAwesome;
+using Blazorise.LoadingIndicator;
+using Blazorise.RichTextEdit;
+using DevExpress.Blazor;
 using MudBlazor.Services;
+using Radzen;
+using Riverbed.Pricing.Paint.Client;
+using Riverbed.Pricing.Paint.Client.Pages.Components.EmailEditor;
+using Riverbed.Pricing.Paint.Shared.Services;
 using Riverbed.Quoted.App.MB.Auth;
-using Riverbed.Quoted.App.MB;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -23,6 +32,24 @@ if (!Uri.TryCreate(apiBaseAddress, UriKind.Absolute, out var apiBaseUri))
 }
 
 builder.Services.AddMudServices();
+builder.Services.AddDevExpressBlazor();
+builder.Services.AddBlazorise(options =>
+{
+    options.Immediate = true;
+})
+    .AddLoadingIndicator()
+    .AddBootstrap5Providers()
+    .AddFontAwesomeIcons()
+    .AddBlazoriseRichTextEdit();
+
+builder.Services.AddScoped<DialogService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<TooltipService>();
+builder.Services.AddScoped<ContextMenuService>();
+builder.Services.AddScoped<Riverbed.Pricing.Paint.Shared.Services.ThemeService>();
+builder.Services.AddScoped<IPricingService, PricingService>();
+builder.Services.AddTransient<IEmailEditorTemplateManger, EmailEditorTemplateManger>();
+
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<ServerCookieCredentialsHandler>();

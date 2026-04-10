@@ -1,0 +1,235 @@
+@page "/pricing/project-type-selection/{CustomerId}/{ProjectId}"
+
+@inject ILogger<ProjectTypeSelection> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator>
+    <Layout>
+        <LayoutContent>
+            <Steps @ref="stepsRef" @bind-SelectedStep="selectedStep" NavigationAllowed="NavigationAllowed">
+                <Items>
+                    <Step Name="1" Title="Step 1" Description="Select Project Type">Info</Step>
+                    <Step Name="2" Title="Step 2" Description="Select Project">Areas</Step>
+                    <Step Name="3" Title="Step 3" Description="Select Options">Options</Step>
+                    <Step Name="4" Title="Step 4" Description="Review and Submit">Extras</Step>
+                </Items>
+                <Content>
+                    <StepPanel Name="1">
+                        <Div TextAlignment="TextAlignment.Center">
+                            <Heading Size="HeadingSize.Is3">@companyCustomer.FirstName @companyCustomer.LastName</Heading>
+                                <Paragraph>
+                                    <Heading Size="HeadingSize.Is4">@selectedProject.ProjectName</Heading>
+                                    @selectedProject.Address1<br />
+                                @{
+                                    if (!string.IsNullOrEmpty(selectedProject.Address2))
+                                        @selectedProject.Address2<br />
+                                }
+                                @selectedProject.City, @selectedProject.StateCode @selectedProject.ZipCode<br />
+                                <Button Color="Color.Link" Clicked="@(() => EditJobPopupVisible = true)">Edit Job</Button>
+                            </Paragraph>
+                        </Div>
+                    </StepPanel>
+                    <StepPanel Name="2">
+                        Step 2
+                    </StepPanel>
+                    <StepPanel Name="3">
+                        Step 3
+                    </StepPanel>
+                    <StepPanel Name="4">
+                        Step 4
+                    </StepPanel>
+                </Content>
+            </Steps>
+        </LayoutContent>
+        <LayoutFooter>
+            <Div Display="Display.Flex" Class="justify-content-center" Margin="Margin.Is5.FromBottom">
+                <Button Color="Color.Secondary" Margin="Margin.Is2.FromEnd" Clicked="() => stepsRef.PreviousStep()">
+                    Previous
+                </Button>
+                <Button Color="Color.Primary" Clicked="() => NextStep()">
+                    Next
+                </Button>
+            </Div>
+        </LayoutFooter>
+    </Layout>
+
+</LoadingIndicator>
+
+<DxPopup @bind-Visible="@EditJobPopupVisible"
+         ShowFooter="true"
+         HeaderText="Edit Job">
+    <BodyContentTemplate>
+        <Fields VerticalAlignment="Blazorise.VerticalAlignment.Middle" Model="@selectedProject">
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="ProjectName">Project Name</Label>
+                <TextEdit Placeholder="" @bind-Text="@selectedProject.ProjectName" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="Address1">Address 1</Label>
+                <TextEdit id="Address1" @bind-Text="@selectedProject.Address1" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is12">
+                <Label for="Address2">Address 2</Label>
+                <TextEdit id="Address2" @bind-Text="@selectedProject.Address2" />
+            </Field>
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="City">City</Label>
+                <TextEdit id="LastName" @bind-Text="@selectedProject.City" />
+            </Field>
+
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="StateCode">State</Label>
+                <TextEdit id="StateCode" @bind-Text="@selectedProject.StateCode" />
+            </Field>
+            <Field ColumnSize="ColumnSize.Is4">
+                <Label for="ZipCode">Zip</Label>
+                <TextEdit id="ZipCode" @bind-Text="@selectedProject.ZipCode" />
+            </Field>
+        </Fields>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Primary" Text="Save" Click="@(() => SaveProjectModal())" />
+        <DxButton CssClass="popup-button my-1 ms-2" RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => EditJobPopupVisible = false)" />
+    </FooterContentTemplate>
+</DxPopup>
+
+
+@code {
+    [Parameter]
+    public string CustomerId { get; set; }
+    [Parameter]
+    public string ProjectId { get; set; }
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    public ProjectData selectedProject { get; set; }
+    public List<StatusCode> statusCodes { get; set; }
+    public List<PaintQuality> paintQualities { get; set; }
+    public IPricingService pricingService { get; set; }
+    public bool navigationAllowed { get; set; }
+    private bool EditJobPopupVisible = false;
+    private Steps stepsRef;
+    private string selectedStep = "1";
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!authState.User.Identity.IsAuthenticated)
+        {
+            NavigationManager.NavigateTo("Account/Login");
+        }
+        else
+        {
+            await LoadingIndicatorService.Show();
+            await LoadData();
+            await LoadingIndicatorService.Hide();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var projectId = int.Parse(ProjectId);
+        if (firstRender && projectId == 0)
+        {
+            EditJobPopupVisible = true;
+        }
+    }
+
+    private bool NavigationAllowed(StepNavigationContext context)
+    {
+        if (context.CurrentStepIndex == 1 && context.NextStepIndex == 2)
+        {
+            if (string.IsNullOrEmpty(selectedProject.ProjectName) || string.IsNullOrEmpty(selectedProject.Address1) || string.IsNullOrEmpty(selectedProject.City) || string.IsNullOrEmpty(selectedProject.StateCode) || string.IsNullOrEmpty(selectedProject.ZipCode))
+            {
+                return false;
+            }
+
+        }
+        return true;
+    }
+
+    private async Task NextStep()
+    {
+        if (selectedStep == "1")
+        {
+            await SaveProject();
+        }
+        else if (selectedStep == "2")
+        {
+            //await SaveProject();
+        }
+        else if (selectedStep == "3")
+        {
+            //await SaveProject();
+        }
+        else if (selectedStep == "4")
+        {
+            //await SaveProject();
+        }
+
+        await stepsRef.NextStep();
+        StateHasChanged();
+    }
+
+    public async Task LoadData()
+    {
+        companyCustomer = await pricingService.GetCompanyCustomerAsync(CustomerId);
+        var custId = companyCustomer.Id;
+
+        if (string.IsNullOrEmpty(ProjectId))
+        {
+            selectedProject = new ProjectData()
+                {
+                    CompanyCustomerId = custId,
+                    CreatedDate = DateTime.Now,
+                    BaseAmount = 0,
+                    CompletedDate = DateTime.Now.AddDays(30),
+                    StatusCodeId = 1,
+                    CustomerEmail = companyCustomer.Email,
+                    CustomerPhone = companyCustomer.MobilePhone ?? string.Empty,
+                    SecondaryCcEmail = companyCustomer.SecondaryCcEmail,
+                    SecondaryPhoneNumber = companyCustomer.SecondaryPhoneNumber,
+                    Address1 = companyCustomer.Address1,
+                    Address2 = companyCustomer.Address2,
+                    City = companyCustomer.City,
+                    StateCode = companyCustomer.StateCode,
+                    ZipCode = companyCustomer.ZipCode,
+                    ProjectName = string.Empty,
+                    Summary = "Painting Project",
+                    ScopeOfWork = string.Empty
+                };
+        }
+        else
+        {
+            selectedProject = await pricingService.GetCustomerProjectAsync(ProjectId);
+            selectedStep = "1";
+        }
+
+        companyCustomer = await pricingService.GetCompanyCustomerAsync(CustomerId);
+        statusCodes = await pricingService.GetAllStatusCodesAsync();
+        paintQualities = await pricingService.GetAllPaintQualitiesAsync();
+    }
+
+    public async Task SaveProjectModal()
+    {
+        await SaveProject();
+        EditJobPopupVisible = false;
+    }
+
+    public async Task SaveProject()
+    {
+        if (selectedProject.Id == 0)
+        {
+            selectedProject = await pricingService.CreateCustomerProjectAsync(selectedProject);
+        }
+        else
+        {
+            await pricingService.UpdateCustomerProjectAsync(selectedProject);
+        }
+    }
+}

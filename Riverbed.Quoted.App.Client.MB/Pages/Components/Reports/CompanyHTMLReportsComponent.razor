@@ -1,0 +1,249 @@
+@page "/companyhtmlreportscomponent"
+@page "/companyhtmlreportscomponent/{CompanyGuid}"
+@page "/companyhtmlreportscomponent/{CompanyGuid}/{SelectedReportId:int}"
+@page "/companyhtmlreportscomponent/{SelectedReportId:int}"
+
+@inject HttpClient Http
+@inject ILogger<CompanyHTMLReportsComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<h3>Company HTML Report Templates</h3>
+<LoadingIndicator Visible="@isBusy">
+    <div class="d-flex flex-column gap-3">
+        <DxGrid Data="@reports"
+                KeyFieldName="Id"
+                EditModelSaving="Grid_EditModelSaving"
+                DataItemDeleting="Grid_DataItemDeleting"
+                @ref="MyGrid">
+            <Columns>
+                <DxGridDataColumn FieldName="CompanyName" Caption="Company Name" />
+                <DxGridDataColumn FieldName="ReportTypeId" Caption="Report Type">
+                    <CellDisplayTemplate>
+                        @{
+                            var reportTypeId = ((CompanyHTMLReportTemplate)context.DataItem).ReportTypeId;
+                            var reportType = reportTypes.FirstOrDefault(x => x.Id == reportTypeId);
+                            if (reportType != null)
+                            {
+                                <span>@reportType.ReportTypeName</span>
+                            }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>                
+                <DxGridDataColumn FieldName="IsGlobalTemplate" Caption="Global" />
+                <DxGridDataColumn FieldName="IsActive" Caption="Active" />
+                <DxGridDataColumn FieldName="DisplayOrder" Caption="Display Order" />
+                <DxGridCommandColumn Width="160px">
+                    <CellDisplayTemplate>
+                        <DxButton RenderStyle="ButtonRenderStyle.Light"
+                                  Click="@(() => SelectReport((CompanyHTMLReportTemplate)context.DataItem))"
+                                  Text="Edit" />
+                        <DxButton RenderStyle="ButtonRenderStyle.Danger" CssClass="ms-2"
+                                  Click="@(() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem))"
+                                  Text="Delete" />
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+            </Columns>
+        </DxGrid>
+
+        @* @if (selectedReport != null)
+        {
+            <div class="border rounded p-3">
+                <CompanyHTMLReportEditForm Report="@selectedReport" 
+                                         ReportTypes="@reportTypes" 
+                                         OnSaveReport="@SaveReport" />
+            </div>
+        } *@
+    </div>
+</LoadingIndicator>
+
+@* Popup Edit Modal *@
+<DxPopup @bind-Visible="isEditPopupVisible"
+         ShowCloseButton="true"
+         CloseOnEscape="true"
+         Width="900px"
+         HeaderText="Edit Company HTML Report Template">
+    <BodyTemplate Context="popupCtx">
+        <div style="padding:7px;">
+            <EditForm Model="@editModel" OnValidSubmit="OnSubmitEdit">
+                <DataAnnotationsValidator />
+                <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Report Type">
+                        <ChildContent Context="itemCtx">
+                            <DxComboBox Data="@reportTypes"
+                                        TextFieldName="ReportTypeName"
+                                        ValueFieldName="Id"
+                                        @bind-Value="editModel.ReportTypeId" />
+                        </ChildContent>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Report Name">
+                        <ChildContent Context="itemCtx">
+                            <DxTextBox @bind-Text="editModel.ReportName" />
+                        </ChildContent>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Company Name">
+                        <ChildContent Context="itemCtx">
+                            <DxTextBox @bind-Text="editModel.CompanyName"/>
+                        </ChildContent>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Display Order">
+                        <ChildContent Context="itemCtx">
+                            <DxSpinEdit @bind-Value="editModel.DisplayOrder" />
+                        </ChildContent>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Active">
+                        <ChildContent Context="itemCtx">
+                            <DxCheckBox @bind-Checked="editModel.IsActive" />
+                        </ChildContent>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Global Template">
+                        <ChildContent Context="itemCtx">
+                            <DxCheckBox @bind-Checked="editModel.IsGlobalTemplate" />
+                        </ChildContent>
+                    </DxFormLayoutItem>               
+                </DxFormLayout>
+
+                <div class="mt-3 d-flex justify-content-end gap-2">
+                    <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancel" Click="@(() => isEditPopupVisible = false)" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Save" SubmitFormOnClick="true" />
+                </div>
+            </EditForm>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter]
+    public string CompanyGuid { get; set; } = null;
+    [Parameter]
+    public int? SelectedReportId { get; set; } = null;
+
+    private List<CompanyHTMLReportTemplate> reports = new();
+    private CompanyHTMLReportTemplate selectedReport;
+    private CompanyHTMLReportTemplate editModel = new();
+    private List<CompanyReportType> reportTypes = new();
+    private bool isBusy;
+    private bool isEditPopupVisible;
+    private IGrid MyGrid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportTypes();
+        await UpdateData();
+
+        if (SelectedReportId.HasValue)
+        {
+            var match = reports.FirstOrDefault(r => r.Id == SelectedReportId.Value);
+            if (match != null)
+            {
+                SelectReport(match);
+            }
+        }
+    }
+
+    private void SelectReport(CompanyHTMLReportTemplate report)
+    {
+        selectedReport = report;
+        // Create an editable copy for the modal
+        editModel = new CompanyHTMLReportTemplate
+        {
+            Id = report.Id,
+            CompanyGuid = report.CompanyGuid,
+            CompanyName = report.CompanyName,
+            ReportName = report.ReportName,
+            ReportTypeId = report.ReportTypeId,
+            ReportHTMLText = report.ReportHTMLText,
+            IsGlobalTemplate = report.IsGlobalTemplate,
+            IsActive = report.IsActive,
+            DisplayOrder = report.DisplayOrder,
+            LastUpdatedDateTime = report.LastUpdatedDateTime
+        };
+        isEditPopupVisible = true;
+        StateHasChanged();
+    }
+
+    private async Task OnSubmitEdit()
+    {
+        try
+        {
+            editModel.LastUpdatedDateTime = DateTime.UtcNow;
+            await SaveReport(editModel);
+            isEditPopupVisible = false;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving report from popup editor");
+            throw;
+        }
+    }
+
+    private async Task LoadReportTypes()
+    {
+        reportTypes = await IPricingService.GetAllCompanyReportTypesAsync();
+    }
+
+    private async Task SaveReport(CompanyHTMLReportTemplate report)
+    {
+        try
+        {
+            isBusy = true;
+            
+            if (report.Id == 0)
+            {
+                await IPricingService.CreateCompanyHTMLReportTemplateAsync(report);
+            }
+            else
+            {
+                await IPricingService.UpdateCompanyHTMLReportTemplateAsync(report);
+            }
+            
+            await UpdateData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving report");
+            throw;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task UpdateData()
+    {
+        try
+        {
+            isBusy = true;
+            reports = !string.IsNullOrEmpty(CompanyGuid) 
+                ? await IPricingService.GetCompanyHTMLReportTemplatesByCompanyAsync(CompanyGuid)
+                : new List<CompanyHTMLReportTemplate>();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating data");
+            reports = new List<CompanyHTMLReportTemplate>();
+        }
+        finally
+        {
+            isBusy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        var report = (CompanyHTMLReportTemplate)args.DataItem;
+        await IPricingService.DeleteCompanyHTMLReportTemplateAsync(report.Id);
+        await UpdateData();
+    }
+
+    private async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        await SaveReport((CompanyHTMLReportTemplate)args.EditModel);
+    }
+}

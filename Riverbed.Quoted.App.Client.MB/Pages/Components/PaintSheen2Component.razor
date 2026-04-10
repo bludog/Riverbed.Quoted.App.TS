@@ -1,0 +1,114 @@
+@inject HttpClient Http
+@inject ILogger<PaintSheen2Component> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator Visible="@isBusy">
+    <DxGrid Data="@paintsheens"
+            EditModelSaving="Grid_EditModelSaving"
+            CustomizeEditModel="Grid_CustomizeEditModel"
+            DataItemDeleting="Grid_DataItemDeleting"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="MyGrid">
+        <Columns>
+            <DxGridDataColumn FieldName="Id" Caption="Id" />
+            <DxGridDataColumn FieldName="PaintSheenName" Caption="PaintSheenName" />
+
+
+            <DxGridCommandColumn Width="60px">
+                <HeaderTemplate>
+                    <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+                </HeaderTemplate>
+                <CellDisplayTemplate>
+                    @{
+                        <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                        <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EditFormTemplate Context="EditFormContext">
+            @{
+                var newPaintSheen = (PaintSheen)EditFormContext.EditModel;
+            }
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="PaintSheenName">
+                    <DxTextBox @bind-Text="@newPaintSheen.PaintSheenName" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </EditFormTemplate>
+
+    </DxGrid>
+</LoadingIndicator>
+
+
+@code {
+    public List<PaintSheen> paintsheens { get; set; }
+    public PaintSheen paintsheen { get; set; } = new PaintSheen();
+    public bool isBusy { get; set; } = false;
+    public IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        UpdateData();
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        var paintsheen = (PaintSheen)args.EditModel;
+        if (args.IsNew)
+        {
+            await pricingService.CreatePaintSheenAsync(paintsheen);
+        }
+        else
+        {
+            await pricingService.UpdatePaintSheenAsync(paintsheen);
+        }
+        UpdateData();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs args)
+    {
+        var paintsheen = new PaintSheen();
+        foreach (var property in typeof(PaintSheen).GetProperties())
+        {
+            if (property.PropertyType == typeof(string))
+            {
+                property.SetValue(paintsheen, "");
+            }
+            else if (property.PropertyType == typeof(int))
+            {
+                property.SetValue(paintsheen, 0);
+            }
+            else if (property.PropertyType == typeof(float))
+            {
+                property.SetValue(paintsheen, 0.0f);
+            }
+            else if (property.PropertyType == typeof(double))
+            {
+                property.SetValue(paintsheen, 0.0);
+            }
+        }
+
+        args.EditModel = paintsheen;
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        await pricingService.DeletePaintSheenAsync(((PaintSheen)args.DataItem).Id);
+        UpdateData();
+    }
+
+    async Task UpdateData()
+    {
+        isBusy = true;
+        paintsheens = await pricingService.GetAllPaintSheensAsync();
+        isBusy = false;
+        StateHasChanged();
+    }
+}
+

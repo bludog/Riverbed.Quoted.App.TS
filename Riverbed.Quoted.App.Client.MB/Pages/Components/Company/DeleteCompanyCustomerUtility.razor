@@ -1,0 +1,171 @@
+@page "/utils/delete-company-customer/{CompanyGuid:guid}"
+@attribute [Authorize(Roles = "Administrator")]
+
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Entities
+@inject IPricingService PricingService
+@inject ILogger<DeleteCompanyCustomerUtility> Logger
+@inject IJSRuntime JS
+@inject IToastService ToastService
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Delete Company Customer Utility</PageTitle>
+
+@if (isLoading)
+{
+    <Blazorise.LoadingIndicator Visible="true" />
+}
+else if (company != null)
+{
+    <Blazorise.Card>
+        <Blazorise.CardHeader>
+            <h5>Delete Company Customer and Related Data</h5>
+        </Blazorise.CardHeader>
+        <Blazorise.CardBody>
+            <div class="mb-3">
+                <label>Company:</label>
+                <div><strong>@company.CompanyName</strong></div>
+            </div>
+            <div class="mb-3">
+                <label for="customerSelect">Select Customer:</label>
+                <Blazorise.Select TValue="Guid"
+                                  SelectedValue="selectedCustomerId"
+                                  SelectedValueChanged="OnCustomerChanged"
+                                  Id="customerSelect">
+                    <Blazorise.SelectItem Value="Guid.Empty">-- Select a customer --</Blazorise.SelectItem>
+                    @foreach (var customer in customers)
+                    {
+                        <Blazorise.SelectItem Value="@customer.CustomerId">@customer.FirstName @customer.LastName</Blazorise.SelectItem>
+                    }
+                </Blazorise.Select>
+            </div>
+
+            @if (selectedCustomerId != Guid.Empty)
+            {
+                @if (selectedCustomerProjects is not null)
+                {
+                    @if (selectedCustomerProjects.Any())
+                    {
+                        <Blazorise.Card>
+                            <Blazorise.CardHeader>
+                                <strong>Projects for @selectedCustomer?.FirstName @selectedCustomer?.LastName</strong>
+                            </Blazorise.CardHeader>
+                            <Blazorise.CardBody>
+                                <Blazorise.ListGroup>
+                                    @foreach (var project in selectedCustomerProjects)
+                                    {
+                                        <Blazorise.ListGroupItem>
+                                            <div>
+                                                <strong>@project.ProjectName</strong>
+                                                <div class="text-muted small">
+                                                    @project.Address1, @project.City, @project.StateCode @project.ZipCode
+                                                </div>
+                                                <div class="text-muted small">
+                                                    Created: @project.CreatedDate.ToShortDateString()
+                                                </div>
+                                            </div>
+                                        </Blazorise.ListGroupItem>
+                                    }
+                                </Blazorise.ListGroup>
+                            </Blazorise.CardBody>
+                        </Blazorise.Card>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info">No projects found for this customer.</div>
+                    }
+                }
+
+                <div class="alert alert-danger mt-3">
+                    <strong>Warning:</strong> This will permanently delete the customer and all related projects, rooms, and associated data. This action cannot be undone.
+                </div>
+                <Blazorise.Button Color="Color.Danger" Clicked="DeleteCustomerAsync">Delete Customer and Related Data</Blazorise.Button>
+            }
+        </Blazorise.CardBody>
+    </Blazorise.Card>
+}
+else
+{
+    <div class="alert alert-warning">Company not found.</div>
+}
+
+@if (!string.IsNullOrEmpty(statusMessage))
+{
+    <div class="alert alert-info">@statusMessage</div>
+}
+
+@code {
+    [Parameter]
+    public Guid CompanyGuid { get; set; }
+
+    private Company? company;
+    private List<CompanyCustomer> customers = new();
+    private Guid selectedCustomerId = Guid.Empty;
+    private CompanyCustomer? selectedCustomer;
+    private List<ProjectData>? selectedCustomerProjects;
+    private bool isLoading = false;
+    private string? statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        company = null;
+        customers.Clear();
+        if (CompanyGuid != Guid.Empty)
+        {
+            company = await PricingService.GetCompanyAsync(CompanyGuid);
+            if (company != null)
+            {
+                customers = await PricingService.GetAllCompanyCustomersByGuidAsync(CompanyGuid.ToString());
+            }
+        }
+        isLoading = false;
+    }
+
+    private async Task OnCustomerChanged(Guid value)
+    {
+        selectedCustomerId = value;
+        selectedCustomer = customers.FirstOrDefault(c => c.CustomerId == selectedCustomerId);
+        selectedCustomerProjects = null;
+        if (selectedCustomer != null)
+        {
+            selectedCustomerProjects = await PricingService.GetAllCustomerProjectsAsync(selectedCustomer.Id);
+        }
+        StateHasChanged();
+    }
+
+    private async Task DeleteCustomerAsync()
+    {
+        if (selectedCustomerId == Guid.Empty)
+            return;
+        var confirm = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this customer and all related data? This cannot be undone.");
+        if (!confirm)
+            return;
+        isLoading = true;
+        statusMessage = null;
+        StateHasChanged();
+        int deletedProjects = selectedCustomerProjects?.Count ?? 0;
+        try
+        {
+            await PricingService.DeleteCompanyCustomerAndRelatedDataAsync(selectedCustomerId);
+            statusMessage = "Customer and all related data deleted successfully.";
+            customers = await PricingService.GetAllCompanyCustomersByGuidAsync(CompanyGuid.ToString());
+            selectedCustomerId = Guid.Empty;
+            selectedCustomer = null;
+            selectedCustomerProjects = null;
+
+            ToastService.Show($"Deleted {deletedProjects} project(s) for this customer.", "Success");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting customer and related data");
+            statusMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

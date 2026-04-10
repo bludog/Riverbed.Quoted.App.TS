@@ -1,0 +1,386 @@
+@page "/paintable-items"
+@using DevExpress.Blazor
+@inject ILogger<PaintableItemsGrid> localLogger
+@inject IToastService ToastService
+@inject IPricingService PaintableItemService
+@rendermode InteractiveWebAssembly
+
+<h3 class="mb-4">Additional Items</h3>
+
+<ErrorBoundary>
+    <ChildContent>
+
+        @if (isLoading)
+        {
+            <div class="text-center my-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <div class="mt-2">@loadingMessage</div>
+            </div>
+        }
+        else
+        {
+            <DxGrid Data="@items"       
+            ShowFilterRow="false"
+            CustomizeEditModel="Grid_CustomizeEditModel"
+            EditModelSaving="Grid_EditModelSaving"
+            DataItemDeleting="Grid_DataItemDeleting"
+            PopupEditFormCssClass="pw-800"
+            EditMode="GridEditMode.PopupEditForm"
+            @ref="grid">
+                <Columns>
+                    <DxGridDataColumn FieldName="Name" Caption="Name" />
+                    <DxGridDataColumn FieldName="Description" Caption="Description" />
+                    <DxGridDataColumn FieldName="Price" Caption="Price" DisplayFormat="c2" Width="80px" />
+                    <DxGridDataColumn FieldName="PricingTypeId" Caption="Priced By" Width="100px">
+                        <CellDisplayTemplate >
+                            @if (context != null)
+                            {
+                                var pricingTypeId = (int)context.Value;
+                                var pricingType = pricingTypes.FirstOrDefault(pt => pt.Id == pricingTypeId);
+                                <span>@pricingType?.PricingTypeName</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PaintTypeId" Caption="Paint" >
+                        <CellDisplayTemplate>
+                            @if (context != null)
+                            {
+                                var paintTypeId = (int)context.Value;
+                                var paintType = paintTypes.FirstOrDefault(pt => pt.Id == paintTypeId);
+                                <span>@paintType?.PaintTypeName</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="SquareFootage" Caption="SqFt" Width="60px" SortOrder="GridColumnSortOrder.Descending"/>
+                    <DxGridDataColumn FieldName="BaseTime" Caption="Time (hr)" Width="60px" />
+                    <DxGridDataColumn FieldName="AdditionalTime" Caption="Addl Time" Width="60px"/>
+                    <DxGridDataColumn FieldName="Count" Caption="Count" Width="60px"/>
+                    <DxGridDataColumn FieldName="Coats" Caption="Coats" Width="60px"/>
+
+                    <DxGridCommandColumn Width="150px"/>
+                </Columns>
+               
+                <EditFormTemplate Context="editContext">
+                    @{
+                    editCompanyContext = editContext;
+                    var item2 = (PaintableItem)editContext.EditModel;
+                    }
+                    <DxFormLayout CssClass="w-100" @key="companyPaintableItemId">
+                        @* Select existing item *@
+                        @if (!isEditMode)
+                        {
+                            <DxFormLayoutItem Caption="Select Item"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxComboBox Data="@companyPaintableItems"
+                                            ValueFieldName="Id"
+                                            TextFieldName="Name"
+                                            NullText="Select Paintable Item..."
+                                            @bind-Value="companyPaintableItemId" />
+                            </DxFormLayoutItem>
+                        }
+
+                        @* Core fields *@
+                        @if (isEditMode)
+                        {
+                            <DxFormLayoutItem Caption="Name"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxTextBox @bind-Text="item2.Name" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Price"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.Price" DisplayFormat="c2" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Paint Type"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxComboBox Data="@paintTypes"
+                                            ValueFieldName="Id"
+                                            TextFieldName="PaintTypeName"
+                                            @bind-Value="item2.PaintTypeId"
+                                            NullText="Select Paint...">
+                                    <ItemTemplate Context="pt">@pt.PaintTypeName</ItemTemplate>
+                                </DxComboBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Priced By"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxComboBox Data="@pricingTypes"
+                                            ValueFieldName="Id"
+                                            TextFieldName="PricingTypeName"
+                                            @bind-Value="item2.PricingTypeId"
+                                            NullText="Select Price By...">
+                                    <ItemTemplate Context="pt">@pt.PricingTypeName</ItemTemplate>
+                                </DxComboBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Description"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxTextBox @bind-Text="item2.Description" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="SqFt"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.SquareFootage" DisplayFormat="n0" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Time (hr)"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.BaseTime" DisplayFormat="n2" />
+                            </DxFormLayoutItem>
+                        }
+                        
+                        @* Advanced Settings toggle *@                       
+                        <DxFormLayoutItem ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" Visible="@isEditMode">
+                            <DxButton Click="() => ShowAdvanced = !ShowAdvanced">
+                                <ChildContent Context="buttonContext">
+                                    @(ShowAdvanced
+                                        ? "? Hide Advanced Settings"
+                                        : "? Advanced Settings")
+                                </ChildContent>
+                            </DxButton>
+                        </DxFormLayoutItem>
+                                               
+
+                        @* Advanced fields *@
+                        @if (isEditMode && ShowAdvanced)
+                        {
+                            <DxFormLayoutItem Caption="Additional Time"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.AdditionalTime" DisplayFormat="n2" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Count"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.Count" DisplayFormat="n0" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Coats"
+                                              ColSpanLg="4" ColSpanMd="12" ColSpanSm="12">
+                                <DxSpinEdit @bind-Value="item2.Coats" DisplayFormat="n0" />
+                            </DxFormLayoutItem>
+                        }
+                    </DxFormLayout>
+                </EditFormTemplate>                                
+            </DxGrid>
+        }
+    </ChildContent>
+
+    <ErrorContent Context="exception">
+        <div class="alert alert-danger">An unexpected error occurred: @exception.Message</div>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    [Parameter] 
+    public int RoomId { get; set; }
+    [Parameter]
+    public string? CompanyGuid { get; set; }
+    private GridEditFormTemplateContext? editCompanyContext;
+    private List<PaintableItem> items = new();
+    private DxGrid? grid;
+    private List<PaintType> paintTypes = new();
+    private List<PricingType> pricingTypes = new();
+    private List<CompanyPaintableItem> companyPaintableItems = new();
+    private CompanyPaintableItem selectedCompanyPaintItem = new CompanyPaintableItem();
+    private bool isLoading = true;
+    private string loadingMessage = "Loading paintable items...";
+    private string errorMessage = string.Empty;
+    private bool isEditMode = false;
+
+    // add these to your page/component
+    bool ShowAdvanced = false;
+    void OnAdvancedToggled(bool state) => ShowAdvanced = state;
+
+    private int? _companyPaintableItemId;
+    public int? companyPaintableItemId
+    {
+        get => _companyPaintableItemId;
+        set
+        {
+            if (_companyPaintableItemId != value)
+            {
+                _companyPaintableItemId = value;
+                OnCompanyPaintableItemChanged(value);
+                isEditMode = value != null;
+            }
+        }
+    }
+    protected override Task OnInitializedAsync()
+    {
+        localLogger.LogInformation("Initializing PaintableItemGrid");
+        return Task.CompletedTask;
+    }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        localLogger.LogInformation("Parameters set for PaintableItemGrid with RoomId: {RoomId} and CompanyGuid: {CompanyGuid}", RoomId, CompanyGuid);
+        await LoadItemsAsync();
+    }
+
+    private async Task LoadItemsAsync()
+    {
+        try
+        {
+            isLoading = true;
+            if (string.IsNullOrEmpty(CompanyGuid))
+            {
+                errorMessage = "Company GUID is not set.";
+                await ToastService.Error(errorMessage);
+                return;
+            }
+            items = await PaintableItemService.GetAllPaintableItemsAsync(RoomId);
+            companyPaintableItems = await PaintableItemService.GetAllCompanyPaintableItemsAsync(CompanyGuid);
+            paintTypes = await PaintableItemService.GetAllPaintTypesAsync();
+            pricingTypes = await PaintableItemService.GetAllPricingTypesAsync();
+            await ToastService.Success($"Loaded {items.Count} items.");
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error loading PaintableItems");
+            errorMessage = "Failed to load items.";
+            await ToastService.Error(errorMessage);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async void AddCompanyPaintItem()
+    {
+        if (companyPaintableItemId == 0)
+        {
+            await ToastService.Error("Please select a company paintable item.");
+            return;
+        }
+
+        try
+        {
+            var localModel = editCompanyContext?.EditModel as PaintableItem;
+            if (localModel == null)
+            {
+                await ToastService.Error("Edit model is null. Cannot add item.");
+                return;
+            }
+
+            localLogger.LogInformation("Adding company paintable item with ID {Id}", companyPaintableItemId);
+            await PaintableItemService.CreatePaintableItemAsync(localModel);
+            await ToastService.Success("Paintable item added successfully.");
+            await LoadItemsAsync();
+            isEditMode = false;
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error adding company paintable item");
+            await ToastService.Error("Failed to add company paintable item.");
+        }
+    }
+
+
+    private async Task Grid_EditModelSaving(GridEditModelSavingEventArgs args)
+    {
+        companyPaintableItemId = 0;
+        var item = (PaintableItem)args.EditModel;
+        var insertType = args.IsNew ? "Add" : "Update";
+
+        try
+        {
+            localLogger.LogInformation($"{insertType}ing item {@item}", item);
+
+            if (args.IsNew)
+            {  
+                await PaintableItemService.CreatePaintableItemAsync(item);
+                await ToastService.Success("Item added successfully.");
+            }
+            else
+            {
+                await PaintableItemService.UpdatePaintableItemAsync(item);
+                await ToastService.Success("Item updated successfully.");
+            }
+
+            isEditMode = false;
+            await LoadItemsAsync();
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, $"Error {insertType.ToLower()}ing PaintableItem");
+            await ToastService.Error($"Failed to {insertType.ToLower()} item.");
+        }
+    }
+
+    private async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs args)
+    {
+        var itemToRemove = (PaintableItem)args.DataItem;
+
+        try
+        {
+            localLogger.LogInformation("Deleting item with ID {Id}", itemToRemove.Id);
+            await PaintableItemService.DeletePaintableItemAsync(itemToRemove.Id);
+            await ToastService.Success("Item deleted successfully.");
+            isEditMode = false;
+            await LoadItemsAsync();
+        }
+        catch (Exception ex)
+        {
+            localLogger.LogError(ex, "Error deleting PaintableItem");
+            await ToastService.Error("Failed to delete item.");
+        }
+    }
+
+    private void Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.IsNew)
+        {
+            localLogger.LogInformation("Creating new PaintableItem");
+            isEditMode = false;
+        }
+        else
+        {
+            localLogger.LogInformation("Editing existing PaintableItem");           
+            isEditMode = true;
+        }            
+    }
+
+    private void OnPaintableItemChanged(int? id)
+    {
+        localLogger.LogInformation("Paintable item changed to ID {Id}", id);
+    }
+
+    private void OnCompanyPaintableItemChanged(int? companyitemId)
+    {
+        var companyitem = companyitemId == null ? null : companyPaintableItems.FirstOrDefault(x => x.Id == companyitemId);
+        if (companyitem == null)
+        {
+            localLogger.LogInformation("Company paintable item not found for ID {Id}", companyitemId);
+            return;
+        }
+
+        var localModel = editCompanyContext?.EditModel as PaintableItem;
+        if (localModel == null)
+        {
+            localLogger.LogWarning("Edit model is null. Cannot update fields.");
+            return;
+        }
+
+        localLogger.LogInformation("EditModel Price: ${Price}", localModel.Price);
+
+        // Update the EditModel properties
+        localModel.Name = companyitem.Name;
+        localModel.Description = companyitem.Description;
+        localModel.Price = companyitem.Price;
+        localModel.PaintTypeId = companyitem.PaintTypeId;
+        localModel.PricingTypeId = companyitem.PricingTypeId;
+        localModel.SquareFootage = companyitem.SquareFootage;
+        localModel.BaseTime = companyitem.BaseTime;
+        localModel.AdditionalTime = 0.0;
+        localModel.Count = 1;
+        localModel.Coats = 2;
+        localModel.RoomId = RoomId;
+
+        // Notify the form that the fields have changed
+        var editContext = editCompanyContext.EditContext;
+        foreach (var prop in typeof(PaintableItem).GetProperties())
+        {
+            editContext.NotifyFieldChanged(new FieldIdentifier(localModel, prop.Name));
+        }
+
+        localLogger.LogInformation("EditModel Price Changed to ${Price}", localModel.Price);
+    }
+
+
+}

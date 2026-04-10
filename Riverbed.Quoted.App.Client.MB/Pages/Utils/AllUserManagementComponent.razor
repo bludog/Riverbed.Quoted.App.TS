@@ -1,0 +1,272 @@
+﻿@page "/users"
+@attribute [Authorize(Roles = "Administrator")]
+
+@using Riverbed.Pricing.Paint.Entities
+@using Riverbed.Pricing.Paint.Shared.Services
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazorise.LoadingIndicator
+@using System.Net.Http.Json
+
+@inject ILogger<AllUserManagementComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject IJSRuntime JS
+
+<h3>User Management</h3>
+
+@if (users is null)
+{
+    <p><em>Loading users…</em></p>
+}
+else
+{
+    <DxGrid Data="@users" PageSize="10" ShowPager="true">
+        <Columns>
+            <DxGridDataColumn FieldName="@nameof(UserDto.UserName)" Caption="Username" />
+            <DxGridDataColumn FieldName="@nameof(UserDto.Email)" Caption="Email" />
+            <DxGridDataColumn FieldName="@nameof(UserDto.CompanyName)" Caption="Company" />
+            <DxGridDataColumn Caption="Roles">
+                <CellDisplayTemplate Context="context">
+                    @{
+                        var user = (UserDto)context.DataItem;
+                        @string.Join(", ", user.Roles ?? new List<string>())
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="@nameof(UserDto.IsLockedOut)" Caption="Locked Out" />
+
+            <DxGridCommandColumn Width="300px">
+                <CellDisplayTemplate Context="ctx">
+                    <DxButton RenderStyle="ButtonRenderStyle.Success"
+                             Text="Change PW"
+                             Click="@(async () => await OnChangePasswordAsync((UserDto)ctx.DataItem))" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Primary"
+                             Text="Edit"
+                             Click="@(() => OnEditUser((UserDto)ctx.DataItem))" />
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+    </DxGrid>
+}
+
+<DxPopup @bind-Visible="@isEditPopupVisible"
+         HeaderText="Edit User">
+    <Content>
+        <LoadingIndicator @bind-Visible="@isSaving">
+        @if (editingUser != null)
+        {
+            <EditForm Model="@editingUser" OnValidSubmit="@HandleEditSubmit">
+                <DataAnnotationsValidator />
+                <Microsoft.AspNetCore.Components.Forms.ValidationSummary />
+
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <InputText @bind-Value="editingUser.UserName" class="form-control" />
+                    <ValidationMessage For="@(() => editingUser.UserName)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <InputText @bind-Value="editingUser.Email" class="form-control" />
+                    <ValidationMessage For="@(() => editingUser.Email)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Company</label>
+                    <InputSelect @bind-Value="editingUser.CompanyId" class="form-select">
+                        <option value="">-- Select Company --</option>
+                        @if (companies != null)
+                        {
+                            @foreach (var company in companies)
+                            {
+                                <option value="@company.Id" selected="@(company.Id == editingUser.CompanyId)">
+                                    @company.Name
+                                </option>
+                            }
+                        }
+                    </InputSelect>
+                    @if (string.IsNullOrEmpty(editingUser.CompanyId))
+                    {
+                        <small class="text-muted">
+                            Current company: @(editingUser.CompanyName ?? "None")
+                        </small>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Locked Out</label>
+                    <div class="form-check">
+                        <InputCheckbox @bind-Value="editingUser.IsLockedOut" class="form-check-input" id="isLockedOutCheckbox" />
+                        <label class="form-check-label" for="isLockedOutCheckbox">
+                            Is Locked Out
+                        </label>
+                    </div>
+                    <ValidationMessage For="@(() => editingUser.IsLockedOut)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Roles</label>
+                    @if (availableRoles != null)
+                    {
+                        @foreach (var role in availableRoles)
+                        {
+                            <div class="form-check">
+                                <InputCheckbox @bind-Value="selectedRoles[role]" 
+                                             class="form-check-input"
+                                             id="@($"role_{role}")" />
+                                <label class="form-check-label" for="@($"role_{role}")">
+                                    @role
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="text-end mt-3">
+                    <DxButton Text="Save" RenderStyle="ButtonRenderStyle.Primary"
+                             SubmitFormOnClick="true" />
+                    <DxButton Text="Cancel" RenderStyle="ButtonRenderStyle.Secondary"
+                             Click="@(() => CancelEdit())" />
+                </div>
+            </EditForm>
+        }
+        </LoadingIndicator>
+    </Content>
+</DxPopup>
+
+@code {
+    private List<UserDto>? users;
+    private List<CompanyDto>? companies;
+    private List<string>? availableRoles;
+    private UserDto? editingUser;
+    private Dictionary<string, bool> selectedRoles = new();
+    private bool isEditPopupVisible;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            users = await IPricingService.GetAllUsersAsync();
+            companies = await IPricingService.GetCompaniesAsync();
+            availableRoles = await IPricingService.GetAvailableRolesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading data");
+        }
+    }
+
+    private async Task OnChangePasswordAsync(UserDto user)
+    {
+        try
+        {
+            var newPw = await JS.InvokeAsync<string>("prompt", $"New password for {user.UserName}:");
+            if (string.IsNullOrWhiteSpace(newPw))
+                return;
+
+            await IPricingService.ChangePasswordAsync(user.Id, newPw);
+            await JS.InvokeVoidAsync("alert", "Password updated successfully");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error changing password");
+        }
+    }
+
+    private void OnEditUser(UserDto user)
+    {
+        editingUser = new UserDto
+        {
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            CompanyId = user.CompanyId ?? companies?.FirstOrDefault(c => c.Name == user.CompanyName)?.Id, // Try to match by name if ID is null
+            CompanyGuid = user.CompanyGuid,
+            CompanyName = user.CompanyName,
+            Roles = new List<string>(user.Roles ?? new List<string>()),
+            IsLockedOut = user.IsLockedOut
+        };
+
+        // Ensure companies are loaded
+        if (companies == null)
+        {
+            Logger.LogWarning("Companies list is null when attempting to edit user");
+            return;
+        }
+
+        // Double check company selection
+        if (string.IsNullOrEmpty(editingUser.CompanyId) && !string.IsNullOrEmpty(editingUser.CompanyName))
+        {
+            var matchingCompany = companies.FirstOrDefault(c =>
+                c.Name.Equals(editingUser.CompanyName, StringComparison.OrdinalIgnoreCase));
+            if (matchingCompany != null)
+            {
+                editingUser.CompanyId = matchingCompany.Id;
+            }
+        }
+
+        selectedRoles = availableRoles?.ToDictionary(
+            r => r,
+            r => user.Roles?.Contains(r) ?? false
+        ) ?? new Dictionary<string, bool>();
+
+        isEditPopupVisible = true;
+    }
+
+    private void CancelEdit()
+    {
+        editingUser = null;
+        selectedRoles.Clear();
+        isEditPopupVisible = false;
+    }
+
+    private async Task HandleEditSubmit()
+    {
+        try
+        {
+            if (editingUser == null) return;
+
+            isSaving = true;
+            await InvokeAsync(StateHasChanged);
+
+            // Update basic user info
+            await IPricingService.UpdateUserAsync(editingUser);
+
+            // Update roles
+            var selectedRolesList = selectedRoles
+                .Where(kvp => kvp.Value)
+                .Select(kvp => kvp.Key)
+                .ToList();
+            await IPricingService.UpdateUserRolesAsync(editingUser.Id, selectedRolesList);
+
+            // Update company
+            if (!string.IsNullOrEmpty(editingUser.CompanyId))
+            {
+                await IPricingService.UpdateUserCompanyAsync(editingUser.Id, editingUser.CompanyId);
+            }
+
+            await JS.InvokeVoidAsync("alert", "User updated successfully");
+            CancelEdit();
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating user");
+            await JS.InvokeVoidAsync("alert", $"Error updating user: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}

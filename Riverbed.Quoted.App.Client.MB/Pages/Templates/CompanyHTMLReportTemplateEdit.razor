@@ -1,0 +1,154 @@
+@page "/company-html-report-template-edit/{Id:int?}"
+@using Riverbed.Pricing.Paint.Client.Pages.Components
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Entities.Reporting
+@using Microsoft.AspNetCore.Components.Authorization
+@using Blazorise
+@using MudBlazor
+@using MudExRichTextEditor
+
+@rendermode InteractiveWebAssembly
+
+<PageTitle>@(Id.HasValue ? "Edit Template" : "Create Template")</PageTitle>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (company == null)
+{
+    <MudAlert Severity="Severity.Error">Could not load company information.</MudAlert>
+}
+else
+{    
+    <MudCard Class="pa-4">
+        <MudCardContent>
+            <MudSelect T="int" Label="Report Type" @bind-Value="@currentTemplate.ReportTypeId" Required="true">
+                @if (reportTypes != null)
+                {
+                    foreach (var reportType in reportTypes)
+                    {
+                        <MudSelectItem Value="@reportType.Id">@reportType.ReportTypeName</MudSelectItem>
+                    }
+                }
+            </MudSelect>
+
+            <MudTextField @bind-Value="@currentTemplate.CompanyName" Label="Company Name" ReadOnly="true" Class="mt-3" />
+
+            <MudPaper Class="mt-4">
+                <MudToolBar>
+                    <MudText Typo="Typo.h6">Template Content</MudText>
+                    <MudSpacer />
+                    <MudButton Color="MudBlazor.Color.Primary" OnClick="SaveTemplate">
+                        <MudIcon Icon="@Icons.Material.Filled.Save" Class="mr-2" /> Save Template
+                    </MudButton>
+                </MudToolBar>
+                
+                <MudExRichTextEdit @ref="richTextEdit"
+                                  Height="600"
+                                  EnableResize="true"
+                                  Placeholder="Enter template content..."
+                                  @bind-Value="@currentTemplate.ReportHTMLText" />
+            </MudPaper>
+        </MudCardContent>
+    </MudCard>
+
+    <Snackbar @ref="snackbar" Color="@snackbarColor" Location="SnackbarLocation.Bottom">
+        <SnackbarBody>
+            @snackbarMessage
+        </SnackbarBody>
+    </Snackbar>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [Inject] public IPricingService PricingService { get; set; } = default!;
+    [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    [Inject] public NavigationManager NavigationManager { get; set; } = default!;
+
+    private Company? company;
+    private List<CompanyReportType>? reportTypes;
+    private CompanyHTMLReportTemplate currentTemplate = new();
+    private bool isLoading = true;
+    private MudExRichTextEdit? richTextEdit;
+    private Blazorise.Snackbar.Snackbar? snackbar;
+    private string snackbarMessage = string.Empty;
+    private SnackbarColor snackbarColor = SnackbarColor.Primary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+
+        try
+        {
+            // Get current user's company info
+            var user = (await AuthenticationStateProvider.GetAuthenticationStateAsync()).User;
+            var userEmail = user.Identity?.Name;
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                var companyGuidStr = await PricingService.GetUserCompanyGuidAsync(userEmail);
+                if (Guid.TryParse(companyGuidStr, out var companyGuid))
+                {
+                    company = await PricingService.GetCompanyAsync(companyGuid);
+                    
+                    // Initialize template with default values
+                    currentTemplate.CompanyGuid = companyGuid;
+                    currentTemplate.CompanyName = company.CompanyName;
+                    currentTemplate.IsActive = true;
+                    currentTemplate.DisplayOrder = 100;
+                    currentTemplate.IsGlobalTemplate = false;
+                }
+            }
+
+            // Load report types
+            reportTypes = await PricingService.GetAllCompanyReportTypesAsync();
+
+            // If editing existing template, load it
+            if (Id.HasValue)
+            {
+                var template = await PricingService.GetCompanyHTMLReportTemplateAsync(Id.Value);
+                if (template != null)
+                {
+                    currentTemplate = template;
+                }
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveTemplate()
+    {
+        try
+        {
+            if (Id.HasValue)
+            {
+                await PricingService.UpdateCompanyHTMLReportTemplateAsync(currentTemplate);
+            }
+            else
+            {
+                await PricingService.CreateCompanyHTMLReportTemplateAsync(currentTemplate);
+            }
+
+            snackbarColor = SnackbarColor.Success;
+            snackbarMessage = $"Template {(Id.HasValue ? "updated" : "created")} successfully";
+            if (snackbar is not null)
+            {
+                await snackbar.Show();
+            }
+
+            NavigationManager.NavigateTo("/company-html-report-edit-host");
+        }
+        catch (Exception ex)
+        {
+            snackbarColor = SnackbarColor.Danger;
+            snackbarMessage = $"Error saving template: {ex.Message}";
+            if (snackbar is not null)
+            {
+                await snackbar.Show();
+            }
+        }
+    }
+}

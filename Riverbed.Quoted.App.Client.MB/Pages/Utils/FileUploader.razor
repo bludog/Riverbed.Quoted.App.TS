@@ -1,0 +1,63 @@
+@page "/utils/fileuploader"
+@using DevExpress.Blazor
+@using Riverbed.Pricing.Paint.Shared.Entities
+@using Riverbed.Pricing.Paint.Shared.Data
+@using Riverbed.Pricing.Paint.Shared.Services
+@inject NavigationManager NavigationManager
+@inject ILogger<FileUploader> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IPricingService IPricingService
+
+@rendermode InteractiveWebAssembly
+
+<h3>FileUploader</h3>
+
+<Div class="upload-container">
+    <Div style="@(SelectedFilesCount > 0 ? "display: none" : string.Empty)">
+        <span class="drop-file-icon mb-3"></span>
+        <span class="drop-file-label mb-3">Click the Select File button to select files</span>
+    </Div>
+    <DxUpload Name="file"
+              UploadMode="@UploadMode.OnButtonClick"
+              AllowMultiFileUpload="true"
+              UploadUrl="@GetUploadUrl()"
+              ShowFileList="true"
+              MaxFileSize="15000000"
+              SelectedFilesChanged="@SelectedFilesChanged" />
+
+</Div>
+
+@code {
+    public int SelectedFilesCount { get; set; }
+    private string _companyGuid = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadData();
+        }
+    }
+
+    private string GetUploadUrl()
+    {
+        var url = NavigationManager.BaseUri.TrimEnd('/') + $"/api/FileUpload/Upload/{_companyGuid}";
+        return url;
+    }
+
+    private void SelectedFilesChanged(IEnumerable<UploadFileInfo> files)
+    {
+        SelectedFilesCount = files?.ToList().Count ?? 0;
+        StateHasChanged();
+    }
+
+    public async Task LoadData()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userName = user.Identity.Name;
+        _companyGuid = await IPricingService.GetUserCompanyGuidAsync(userName);
+        
+        StateHasChanged();
+    }
+}

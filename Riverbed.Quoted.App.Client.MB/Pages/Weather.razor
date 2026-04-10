@@ -1,4 +1,5 @@
 @page "/weather"
+@using MudBlazor
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Components.WebAssembly.Authentication
 @inject IHttpClientFactory HttpClientFactory
@@ -10,17 +11,17 @@
 
 @if (!string.IsNullOrWhiteSpace(loadError))
 {
-    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-4">@loadError</MudAlert>
+    <MudAlert Severity="Severity.Error" Variant="MudBlazor.Variant.Outlined" Dense="true" Class="mb-4">@loadError</MudAlert>
 }
 else if (forecasts == null)
 {
-    <MudProgressCircular Color="Color.Default" Indeterminate="true" />
+    <MudProgressCircular Color="MudBlazor.Color.Default" Indeterminate="true" />
 }
 else
 {
     <MudTable Items="forecasts" Hover="true" SortLabel="Sort By" Elevation="0" AllowUnsorted="false">
         <HeaderContent>
-            <MudTh><MudTableSortLabel InitialDirection="SortDirection.Ascending" SortBy="new Func<WeatherForecast, object>(x => x.Date)">Date</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel InitialDirection="MudBlazor.SortDirection.Ascending" SortBy="new Func<WeatherForecast, object>(x => x.Date)">Date</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WeatherForecast, object>(x => x.TemperatureC)">Temp. (C)</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WeatherForecast, object>(x => x.TemperatureF)">Temp. (F)</MudTableSortLabel></MudTh>
             <MudTh><MudTableSortLabel SortBy="new Func<WeatherForecast, object>(x => x.Summary!)">Summary</MudTableSortLabel></MudTh>

@@ -1,0 +1,344 @@
+@page "/company-customer-display/{customerId}"
+
+@inject ILogger<CompanyCustomerDisplay> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+<LoadingIndicator Visible="@isLoading" FullScreen/>
+
+@if (!isLoaded)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <Button Color="Color.Link" Clicked="() => NavigationManager.NavigateTo(customerListView)">
+        <Icon Name="IconName.ChevronLeft" IconSize="IconSize.Large" /> Back
+    </Button>
+
+    <Card>
+        <CardBody>
+            <Div Class="text-center">
+                <CardTitle Size="3">@companyCustomer.FirstName @companyCustomer.LastName</CardTitle>
+                <CardText>
+                    <Div Class="d-flex flex-column gap-1 align-items-center">
+                        @if (!string.IsNullOrWhiteSpace(companyCustomer.Email) || !string.IsNullOrWhiteSpace(companyCustomer.SecondaryCcEmail))
+                        {
+                            <Div Class="d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                                @if (!string.IsNullOrWhiteSpace(companyCustomer.Email))
+                                {
+                                    <Span class="text-muted">Email:</Span>
+                                    <Span class="fw-semibold">@companyCustomer.Email</Span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(companyCustomer.SecondaryCcEmail))
+                                {
+                                    <Span class="text-muted">CC:</Span>
+                                    <Span class="fw-semibold">@companyCustomer.SecondaryCcEmail</Span>
+                                }
+                            </Div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(companyCustomer.MobilePhone) || !string.IsNullOrWhiteSpace(companyCustomer.SecondaryPhoneNumber))
+                        {
+                            <Div Class="d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                                @if (!string.IsNullOrWhiteSpace(companyCustomer.MobilePhone))
+                                {
+                                    <Icon Name="IconName.Phone" IconSize="IconSize.Small" />
+                                    <Span class="fw-semibold">@companyCustomer.MobilePhone</Span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(companyCustomer.SecondaryPhoneNumber))
+                                {
+                                    <Span class="text-muted">Alt:</Span>
+                                    <Span class="fw-semibold">@companyCustomer.SecondaryPhoneNumber</Span>
+                                }
+                            </Div>
+                        }
+                    </Div>
+                    <Div Class="mt-2">
+                        <Div>@companyCustomer.Address1</Div>
+                        @if (companyCustomer.Address2 is not null && companyCustomer.Address2 != "")
+                        {
+                            <Div>@companyCustomer.Address2</Div>
+                        }
+                        <Div>@companyCustomer.City, @companyCustomer.StateCode @companyCustomer.ZipCode</Div>
+                    </Div>
+                    <Div Class="fw-semibold">Projects: @customerProjects.Count</Div>
+                </CardText>
+            </Div>
+        </CardBody>
+
+        <CardFooter>
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <div>
+                    <Button Color="Color.Link" Clicked="HandleEdit">Edit</Button>
+                    <Button Color="Color.Link" Clicked="HandleDelete">Delete</Button>
+                </div>
+                <div>
+                    <Button Color="Color.Link"
+                            Disabled="@(!CanShareQuoteLink)"
+                            Clicked="ShowShareModal">
+                        Self Quote Link
+                    </Button>
+                </div>
+            </div>
+        </CardFooter>
+    </Card>
+
+    <ListGroup Class="company-customer-projects" Flush Mode="ListGroupMode.Selectable" @bind-SelectedItem="@selectedItem" Clicked="OnItemClicked">
+        <ListGroupItem Name="CustomerProjects" Flex="Flex.JustifyContent.Between.AlignItems.Center">
+            <Div>
+                <Heading Size="HeadingSize.Is4">Projects</Heading>
+            </Div>
+            <Button Color="Color.Link" Clicked="HandleNewProject">New</Button>
+        </ListGroupItem>
+
+        <Repeater Items="@customerProjects">
+            <ListGroupItem Name="@context.Id.ToString()"
+                           Flex="Flex.JustifyContent.Between.AlignItems.Center">
+                <Div>
+                    <Heading Size="HeadingSize.Is5" Margin="Margin.Is1.FromBottom">
+                        @if (ShouldShowStatusIcon(context.StatusCodeId))
+                        {
+                            <Badge Pill Class="me-2 bg-transparent p-0 border-0" Style="background-color: transparent;">
+                                <Icon Name="@GetStatusIconName(context.StatusCodeId)"
+                                      Class="@GetStatusTextCssClass(context.StatusCodeId)" />
+                            </Badge>
+                        }
+							@context.ProjectName
+                    </Heading>
+                    <Div Class="d-flex align-items-center gap-2">
+                        <span class="text-muted">@context.CreatedDate.ToString("MMMM d, yyyy")</span>
+                        <span class="project-status-label @(selectedItem == context.Id.ToString() ? "text-white fw-semibold" : GetStatusCss(context.StatusCodeId))">@GetStatusCodeText(context.StatusCodeId)</span>
+                    </Div>
+                </Div>
+                <Div>
+                    <Text TextColor="TextColor.Muted">@context.TotalPrice.ToString("C")</Text>
+                    <Button Color="Color.Link" Clicked="() => OnItemClicked(context.ProjectGuid.ToString())">
+                        <Icon Name="IconName.ChevronRight" IconSize="IconSize.Large" />
+                    </Button>
+                </Div>
+            </ListGroupItem>
+        </Repeater>
+    </ListGroup>
+
+    <!-- SHARE MODAL -->
+    <Modal @ref="shareModal">
+        <ModalContent Centered>
+
+            <ModalHeader>
+                <ModalTitle>Share Self-Quote Link</ModalTitle>
+                <CloseButton Clicked="@HideShareModal" />
+            </ModalHeader>
+
+            <ModalBody>
+
+                <Paragraph>
+                    Share this self-quote URL so Customer can Self Price.
+                </Paragraph>
+
+                <Div Class="d-flex align-items-center mb-3" Style="gap: 0.5rem;">
+                    <TextEdit ReadOnly="true"
+                              Text="@shareUrl"
+                              Style="flex: 1;" />
+
+                    <!-- Copy Icon Button -->
+                    <Button Color="Color.Light"
+                            Clicked="@CopyShareUrl">
+                        <Icon Name="IconName.Clipboard" />
+                    </Button>
+                </Div>
+
+                @if (copySucceeded)
+                {
+                    <!-- Green round success badge -->
+                    <Div Class="d-flex align-items-center text-success" Style="gap: 0.4rem;">
+                        <Icon Name="IconName.CheckCircle" IconSize="IconSize.Large" />
+                        <span>Link Copied</span>
+                    </Div>
+                }
+
+            </ModalBody>
+
+            <ModalFooter>
+                <Button Color="Color.Secondary"
+                        Clicked="@HideShareModal">
+                    Close
+                </Button>
+            </ModalFooter>
+
+        </ModalContent>
+    </Modal>
+
+}
+
+@code {
+    [Parameter] public string customerId { get; set; }
+    public CompanyCustomer companyCustomer { get; set; } = new();
+    public IPricingService pricingService { get; set; }
+    public List<ProjectData> customerProjects { get; set; } = new();
+    public string selectedItem = "";
+    public bool isLoaded { get; set; } = false;
+    public bool isLoading { get; set; } = false;
+    public string customerListView = "company-customer-list";
+
+    // Share modal
+    private Modal shareModal;
+    private string shareUrl = string.Empty;
+    private bool copySucceeded;
+    bool CanShareQuoteLink => isLoaded && companyCustomer?.CustomerId != Guid.Empty;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+    }
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<string>(nameof(customerId), out var value))
+        {
+            Logger.LogInformation(value is null
+                ? "The value of 'Param' is null."
+                : $"The value of 'Param' is '{value}'.");
+        }
+
+        await base.SetParametersAsync(parameters);
+        await LoadData();
+    }
+
+    public async Task LoadData()
+    {
+        try
+        {
+            isLoading = true;
+            isLoaded = false;
+            StateHasChanged();
+
+            companyCustomer = await pricingService.GetCompanyCustomerAsync(customerId);
+            customerProjects = await pricingService.GetAllCustomerProjectsAsync(companyCustomer.Id);
+            selectedItem = customerProjects.FirstOrDefault()?.Id.ToString() ?? "0";
+            isLoaded = true;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    public void HandleEdit() =>
+        NavigationManager.NavigateTo($"company-customer-edit/{customerId}");
+
+    public void HandleDelete() =>
+        NavigationManager.NavigateTo($"company-customer-delete/{customerId}");
+
+    public void OnItemClicked(string projectId) =>
+        NavigationManager.NavigateTo($"pricing/projectentrymain/{customerId}/{projectId}");
+
+    public void HandleNewProject() =>
+        NavigationManager.NavigateTo($"pricing/projectentrymain/{customerId}/0");
+
+
+    // SHARE MODAL ACTIONS
+    private async void ShowShareModal()
+    {
+        if (!CanShareQuoteLink)
+            return;
+
+        shareUrl = $"https://bludog-software.com/rbk/painting-wizard/{companyCustomer.CustomerId}/0";
+        copySucceeded = false;
+
+        // Force the UI to update BEFORE opening the modal
+        await InvokeAsync(StateHasChanged);
+
+        await shareModal.Show();
+    }
+
+
+    private async void HideShareModal()
+    {
+        await shareModal.Hide();
+    }
+
+    async Task CopyShareUrl()
+    {
+        if (string.IsNullOrEmpty(shareUrl)) return;
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", shareUrl);
+            copySucceeded = true;
+            StateHasChanged();
+
+            // Auto-hide after 3 seconds
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                copySucceeded = false;
+                await InvokeAsync(StateHasChanged);
+            });
+
+            Logger.LogInformation("Share URL copied to clipboard for customer {CustomerId}", companyCustomer.CustomerId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to copy share URL");
+        }
+    }
+
+
+    private IconName GetStatusIconName(int statusCodeId) => statusCodeId switch
+    {
+        1 => IconName.Circle,
+        2 => IconName.CheckCircle,
+        5 => IconName.Stop,
+        6 => IconName.DollarSign,
+        7 => IconName.PauseCircle,
+        8 => IconName.PaperPlane,
+        _ => IconName.Circle
+    };
+
+    private string GetStatusTextCssClass(int statusCodeId) => statusCodeId switch
+    {
+        1 => "text-primary",
+        2 => "text-success",
+        5 => "text-danger",
+        6 => "text-success",
+        7 => "text-warning",
+        8 => "text-muted",
+        _ => ""
+    };
+
+    private static string GetStatusCss(int statusId) => statusId switch
+    {
+        2 => "text-success fw-semibold",   // Accepted -> green
+        1 => "text-primary fw-semibold",   // New -> blue
+        6 => "text-success fw-semibold",   // Completed -> green
+        5 => "text-danger fw-semibold",    // Declined -> red
+        3 => "text-warning fw-semibold",   // In-Progress -> amber
+        4 => "text-secondary fw-semibold", // On-Hold -> gray
+        7 => "text-secondary fw-semibold", // Closed -> gray
+        8 => "text-info fw-semibold",      // Proposed -> info blue
+        _ => "text-muted"
+    };
+
+    private string GetStatusCodeText(int statusCodeId) => statusCodeId switch
+    {
+        1 => "New",
+        2 => "Accepted",
+        3 => "In-Progress",
+        4 => "On-Hold",
+        5 => "Declined",
+        6 => "Completed",
+		7 => "Closed",
+		8 => "Proposed",
+        _ => "Unknown"
+	};
+
+    private bool ShouldShowStatusIcon(int statusCodeId) =>
+        statusCodeId is 1 or 2 or 5 or 6 or 7 or 8;
+}

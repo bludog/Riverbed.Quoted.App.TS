@@ -1,0 +1,112 @@
+@page "/paintmanager"
+
+@inject HttpClient Http
+@inject ILogger<PaintManager> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<h3>PaintManager</h3>
+
+<DxGrid Data="@PaintTypes"
+        EditModelSaving="Grid_EditModelSaving"
+        CustomizeEditModel="Grid_CustomizeEditModel"
+        DataItemDeleting="Grid_DataItemDeleting"
+        EditMode="GridEditMode.PopupEditForm"
+        @ref="MyGrid">
+    <Columns>
+        <DxGridDataColumn FieldName="PaintTypeName" Caption="Name" />        
+        <DxGridDataColumn FieldName="CoverageOneCoatSqFt" Caption="Coat SqFt" />
+        <DxGridDataColumn FieldName="CoverageTwoCoatsSqFt" Caption="2 Coat SqFt" />
+        <DxGridDataColumn FieldName="PaintBrandId" Caption="Brand" />
+        <DxGridDataColumn FieldName="PaintTypeId" Caption="Type" />
+        <DxGridDataColumn FieldName="PaintSheenId" Caption="Sheen" />
+        <DxGridDataColumn FieldName="PricePerGallon" Caption="Price" />
+        <DxGridCommandColumn Width="60px">
+            <HeaderTemplate>
+                <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+            </HeaderTemplate>
+            <CellDisplayTemplate>
+                @{
+                    <Icon Name="IconName.Edit" Clicked="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                    <Icon Name="IconName.Delete" Clicked="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                }
+            </CellDisplayTemplate>
+        </DxGridCommandColumn>
+    </Columns>
+    <EditFormTemplate Context="EditFormContext">
+        @{
+            var newPaint = (PaintType)EditFormContext.EditModel;
+        }
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Paint Name">
+                <DxTextBox @bind-Text="@newPaint.PaintTypeName" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Price Per Gallon">
+                <DxSpinEdit @bind-Value="@newPaint.PricePerGallon" DisplayFormat="C" CssClass="cw-320" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Coverage One Coat SqFt">
+                <DxSpinEdit @bind-Value="@newPaint.CoverageOneCoatSqFt" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Paint Sheen">
+                <DxComboBox Data="@PaintSheens" ValueField="Id" TextField="PaintSheenName" @bind-Value="@newPaint.PaintSheenId" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Paint Brand">
+                <DxComboBox Data="@PaintBrands" ValueField="Id" TextField="PaintBrandName" @bind-Value="@newPaint.PaintBrandId" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Price (Gal)">
+                <DxSpinEdit @bind-Value="@newPaint.PricePerGallon" DisplayFormat="C" CssClass="cw-320" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </EditFormTemplate>
+</DxGrid>
+
+@code {
+    public IPricingService _pricingService { get; set; }
+    public List<PaintType> PaintTypes { get; set; }
+    public List<PaintBrand> PaintBrands { get; set; }
+    public List<PaintSheen> PaintSheens { get; set; }
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _pricingService = IPricingService;
+        PaintTypes = await _pricingService.GetAllPaintTypesAsync();
+        PaintBrands = await _pricingService.GetAllPaintBrandsAsync();
+        PaintSheens = await _pricingService.GetAllPaintSheensAsync();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.EditModel == null)
+        {
+            var paintType = new PaintType();
+            paintType.Id = 0;
+            paintType.CoverageOneCoatSqFt = 300;
+            paintType.CoverageTwoCoatsSqFt = 500;
+            paintType.PaintTypeName = "No Name";
+            e.EditModel = new PaintType();
+        }
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        var newPaintType = (PaintType)e.EditModel;
+        if (newPaintType.Id == 0)
+        {
+            await _pricingService.CreatePaintTypeAsync(newPaintType);
+        }
+        else
+        {
+            await _pricingService.UpdatePaintTypeAsync(newPaintType);
+        }
+        PaintTypes = await _pricingService.GetAllPaintTypesAsync();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        await _pricingService.DeletePaintTypeAsync(((PaintType)e.DataItem).Id);
+        PaintTypes = await _pricingService.GetAllPaintTypesAsync();
+    }
+}

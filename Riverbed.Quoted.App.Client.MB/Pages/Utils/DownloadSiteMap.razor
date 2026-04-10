@@ -1,0 +1,34 @@
+@page "/download-sitemap"
+@using Riverbed.Pricing.Paint.Client
+@inject NavigationManager NavigationManager
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Download Site Map PDF</PageTitle>
+
+<h3>Download Site Map PDF</h3>
+
+<p>
+    <button class="btn btn-primary" @onclick="DownloadPdf">Download Site Map PDF</button>
+</p>
+
+@if (downloadUrl != null)
+{
+    <a href="@downloadUrl" download="SiteMap.pdf" style="display:none" @ref="downloadLink"></a>
+}
+
+@code {
+    private string? downloadUrl;
+    private ElementReference downloadLink;
+
+    private async Task DownloadPdf()
+    {
+        var pdfBytes = SiteMapPdfGenerator.GenerateSiteMapPdf();
+        var base64 = Convert.ToBase64String(pdfBytes);
+        downloadUrl = $"data:application/pdf;base64,{base64}";
+        await Task.Yield();
+        await JS.InvokeVoidAsync("triggerFileDownload", downloadLink);
+    }
+
+    [Inject]
+    public IJSRuntime JS { get; set; }
+}

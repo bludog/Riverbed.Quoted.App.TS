@@ -1,0 +1,94 @@
+@page "/GlobalSettings"
+
+@rendermode InteractiveWebAssembly
+@attribute [Authorize]
+
+
+<h3>GlobalSettings</h3>
+
+<CardDeck>
+    <Card>
+        <CardBody>
+            <ItemTypeComponent />
+        </CardBody>
+    </Card>
+    <Card>
+        <CardBody>
+            <PricingTypeComponent />
+        </CardBody>
+    </Card>   
+</CardDeck>
+<CardDeck>   
+    <Card>
+        <CardBody>
+            <PaintBrandComponent />
+        </CardBody>
+    </Card>
+    <Card>
+        <CardBody>
+            <PaintQualityComponent />
+        </CardBody>
+    </Card>
+    <Card>
+        <CardBody>
+            <PaintSheenComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>
+    <Card>
+        <CardBody>
+            <CompanyReportTypeComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>   
+    <Card>
+        <CardBody>
+            <PaintableItemCategoryComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>
+    <Card>
+        <CardBody>
+            <Riverbed.Pricing.Paint.Client.Pages.Utils.AllUserManagementComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+<CardDeck>
+    <Card>
+        <CardBody>
+            <GlobalDefaultsComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+@* <AuthorizeView Roles="Administrator">
+    <Authorized> *@
+        <Card>
+            <CardBody>
+                <CompaniesComponent isCompanyAdmin="false" />
+            </CardBody>
+        </Card>
+ @*    </Authorized>
+</AuthorizeView> *@
+<CardDeck>
+    <Card>
+        <CardBody>
+            <PaintTypeComponent />
+        </CardBody>
+    </Card>
+</CardDeck>
+
+
+
+
+@code {
+    private int count = 0;
+    private void OnSettingsClicked()
+    {
+        // Your click event handling logic here
+        Console.WriteLine("Settings icon clicked");
+        count++;
+    }
+}

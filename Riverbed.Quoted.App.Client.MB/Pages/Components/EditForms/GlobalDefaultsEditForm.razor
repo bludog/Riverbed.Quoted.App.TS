@@ -1,0 +1,47 @@
+@rendermode InteractiveWebAssembly
+
+<DxFormLayout>
+    <DataAnnotationsValidator />
+    <DxFormLayoutItem Caption="Hourly Rate:" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@globalDefaults.HourlyRate" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Time Per SqFt Walls:" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@globalDefaults.TimePerSquareFootWall" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Time Per SqFt Ceiling" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@globalDefaults.TimePerSquareFootCeiling" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Time Per SqFt Baseboards:" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@globalDefaults.TimePerSquareFootBaseboard" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Time Per SqFt Door:" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@globalDefaults.TimePerSquareFootDoor" />
+    </DxFormLayoutItem>
+</DxFormLayout>
+<p />
+<DxButton RenderStyle="ButtonRenderStyle.Success" Click="@Save" Enabled="!isSending">
+    <div class="d-flex">
+        <DxWaitIndicator Visible="isSending" />
+        <span class="mx-2">@Message</span>
+    </div>
+</DxButton>
+
+
+  @code {
+    [Parameter]
+    public GlobalDefaults globalDefaults { get; set; } = new GlobalDefaults();
+    [Parameter]
+    public Func<GlobalDefaults, Task> OnSave { get; set; }
+    [Parameter]
+    public bool isGridEdit { get; set; } = false;
+    bool isSending = false;
+    string Message => isSending ? "Saving..." : "Save";
+
+    async Task Save()
+    {
+    isSending = true;
+        if (OnSave != null)
+            await OnSave(globalDefaults);
+    isSending = false;
+    }
+}

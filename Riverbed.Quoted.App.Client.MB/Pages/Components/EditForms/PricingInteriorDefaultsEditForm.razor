@@ -1,0 +1,60 @@
+@rendermode InteractiveWebAssembly
+
+<DxFormLayout>
+    <DxFormLayoutItem Caption="Wall SqFt Per Hr" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.WallRatePerSquareFoot" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Ceiling SqFt Per Hr" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.CeilingRatePerSquareFoot" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Baseboard LnFt Per Hr" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.BaseboardRatePerLinearFoot" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Door Rate Side Per Hr" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.DoorRateEach" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Crown Rate LnFt Per Hr" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.CrownMoldingRatePerLinearFoot" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Paint Coats" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.PaintCoats" />
+    </DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Paint SqFt Coverage (Gal)" ColSpanLg="4" ColSpanMd="12" ColSpanSm="12" BeginRow="true">
+        <DxSpinEdit @bind-Value="@companyInteriorDefaults.PaintCoveragePerGallon" />
+    </DxFormLayoutItem>
+</DxFormLayout>
+@{
+    if (!isGridEdit)
+    {
+        <p />
+        <DxButton RenderStyle="ButtonRenderStyle.Success" Click="@Save" Enabled="!isSending">
+            <div class="d-flex">
+                <DxWaitIndicator Visible="isSending" />
+                <span class="mx-2">@Message</span>
+            </div>
+        </DxButton>
+    }
+}
+
+
+@code {
+    [Parameter]
+    public PricingInteriorDefault companyInteriorDefaults { get; set; }
+    [Parameter]
+    public Func<PricingInteriorDefault, Task> OnSaveInteriorDefaults { get; set; }
+    [Parameter]
+    public bool isGridEdit { get; set; } = false;
+    bool isSending = false;
+    string Message => isSending ? "Saving..." : "Save";
+
+    async Task Save()
+    {
+        isSending = true;
+        if (OnSaveInteriorDefaults != null)
+            await OnSaveInteriorDefaults(companyInteriorDefaults);
+        isSending = false;
+    }
+}
+
+
+

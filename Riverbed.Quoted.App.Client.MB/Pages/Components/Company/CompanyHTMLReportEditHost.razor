@@ -1,0 +1,406 @@
+@page "/company-html-report-edit-host"
+@using System.Text.Json
+@using Blazorise
+@using Blazorise.Snackbar
+@using Blazorise.LoadingIndicator
+@using Microsoft.AspNetCore.Components.Authorization
+@using Radzen
+@using Radzen.Blazor
+@using Riverbed.Pricing.Paint.Shared.Entities.Reporting
+@using Riverbed.Pricing.Paint.Shared.Services
+@using Riverbed.Pricing.Paint.Shared.Reporting
+@rendermode InteractiveWebAssembly
+
+@inject ILogger<CompanyHTMLReportEditHost> Logger
+
+<PageTitle>Company HTML Report Edit</PageTitle>
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else if (company == null)
+{
+    <p>Could not load company information.</p>
+}
+else if (reportTypes == null)
+{
+    <p>Loading report types...</p>
+}
+else
+{
+    <div class="text-center mb-3">
+        <h3>@company.CompanyName</h3>
+        <h6>Company Templates</h6>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <Field>
+            <FieldLabel>Select Template:</FieldLabel>
+            <Select TValue="int" SelectedValue="@SelectedTemplateRowId" SelectedValueChanged="@OnTemplateRowChanged">
+                <SelectItem Value="0">Select a Template</SelectItem>
+                @foreach (var t in templates)
+                {
+                    <SelectItem Value="@t.Id">@t.ReportName</SelectItem>
+                }
+            </Select>
+        </Field>
+        <Button Color="Color.Primary" Clicked="ShowNewTemplateDialog">
+            <Icon Name="IconName.Add" /> Add New Template
+        </Button>
+    </div>
+    <MudBlazor.MudPopoverProvider/>
+
+    <!-- Radzen root components scoped to this interactive page -->
+    <RadzenDialog />
+    <RadzenNotification />
+    <RadzenTooltip />
+    <RadzenContextMenu />
+
+    <Field>
+        <LoadingIndicator @ref="loadingIndicator">
+            <div style="display:flex; gap:1rem; align-items:flex-start; position:relative;">
+                <div style="flex:1; min-width:0; position:relative;">
+                    <div style="position:absolute; top:-38px; right:0; z-index:10;">
+                        <Button Color="Color.Success" Size="Size.Small" Clicked="OnSaveReport">
+                            <Icon Name="IconName.Save" /> Save
+                        </Button>
+                    </div>
+
+                    <RadzenHtmlEditor @bind-Value="currentReport.ReportHTMLText" Style="min-height: 600px; height: 60vh;" UploadUrl="null">
+                        <RadzenHtmlEditorAlignLeft />
+                        <RadzenHtmlEditorAlignCenter />
+                        <RadzenHtmlEditorAlignRight />
+                        <RadzenHtmlEditorUndo />
+                        <RadzenHtmlEditorRedo />
+                        <RadzenHtmlEditorSeparator />
+                        <RadzenHtmlEditorBold />
+                        <RadzenHtmlEditorItalic />
+                        <RadzenHtmlEditorUnderline />
+                        <RadzenHtmlEditorStrikeThrough />
+                        <RadzenHtmlEditorSeparator />
+                        <RadzenHtmlEditorFontName />
+                        <RadzenHtmlEditorFontSize />
+                        <RadzenHtmlEditorSeparator />
+                        <RadzenHtmlEditorOrderedList />
+                        <RadzenHtmlEditorUnorderedList />
+                        <RadzenHtmlEditorSeparator />
+                        <RadzenHtmlEditorRemoveFormat />
+                        <RadzenHtmlEditorSeparator />
+                        <RadzenHtmlEditorLink />
+                        <RadzenHtmlEditorImage />
+                    </RadzenHtmlEditor>
+                </div>
+                <div style="width:250px; max-height:600px; overflow:auto; border:1px solid #ddd; background:#fafafa; padding:.75rem; border-radius:4px; font-size:.8rem;">
+                    <strong>Tokens</strong>
+                    <p class="text-muted" style="font-size:.65rem;">Click to copy</p>
+                    <ul style="list-style:none; padding:0; margin:0;">
+                        @foreach (var tok in projectTokens)
+                        {
+                            <li style="margin-bottom:.3rem;">
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start" style="font-family:monospace;" @onclick="() => CopyTokenAsync(tok)">@tok</button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+        </LoadingIndicator>
+    </Field>
+    <Snackbar @ref="snackbar" Color="SnackbarColor.Success" Location="SnackbarLocation.Bottom">
+        <SnackbarBody>@snackbarMessage</SnackbarBody>
+    </Snackbar>
+}
+
+<Modal @bind-Visible="showNewTemplateDialog">
+    <ModalContent Size="ModalSize.Large">
+        <ModalHeader><ModalTitle>Create New Template</ModalTitle></ModalHeader>
+        <ModalBody>
+            <Field>
+                <FieldLabel>Report Type</FieldLabel>
+                <Select TValue="int" SelectedValue="@newTemplate.ReportTypeId" SelectedValueChanged="@OnNewTemplateReportTypeChanged">
+                    <SelectItem Value="0">Select a Report Type</SelectItem>
+                    @if (reportTypes != null)
+                    {
+                        @foreach (var rt in reportTypes)
+                        {
+                            <SelectItem Value="@rt.Id">@rt.ReportTypeName</SelectItem>
+                        }
+                    }
+                </Select>
+            </Field>
+            <Field>
+                <FieldLabel>Report Name</FieldLabel>
+                <TextEdit @bind-Text="newTemplate.ReportName" Placeholder="Template name" />
+            </Field>
+            <Field>
+                <FieldLabel>Company Name</FieldLabel>
+                <TextEdit @bind-Text="newTemplate.CompanyName" ReadOnly="true" />
+            </Field>
+            <Field>
+                <FieldLabel>Display Order</FieldLabel>
+                <NumericEdit TValue="int" Min="1" @bind-Value="newTemplate.DisplayOrder" />
+            </Field>
+        </ModalBody>
+        <ModalFooter>
+            <Button Color="Color.Secondary" Clicked="CancelNewTemplate">Cancel</Button>
+            <Button Color="Color.Primary" Clicked="CreateNewTemplate">Create</Button>
+        </ModalFooter>
+    </ModalContent>
+</Modal>
+
+@if (showImageUrlDialog)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal show d-block" tabindex="-1" style="background:rgba(0,0,0,0.2);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Insert Image URL</h5>
+                    <button type="button" class="btn-close" @onclick="() => showImageUrlDialog = false"></button>
+                </div>
+                <div class="modal-body">
+                    <input class="form-control" @bind="imageUrlInput" placeholder="https://..." />
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showImageUrlDialog = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="InsertImageFromUrl">Insert</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject] public IPricingService PricingService { get; set; } = default!;
+    [Inject] public AuthenticationStateProvider AuthenticationStateProvider { get; set; } = default!;
+    [Inject] public IJSRuntime JS { get; set; } = default!;
+
+    private List<CompanyReportType>? reportTypes;
+    private Company? company;
+    private List<TemplateRow> templates = new();
+    private CompanyHTMLReportTemplate currentReport = new();
+    private CompanyHTMLReportTemplate newTemplate = new();
+
+    private bool isLoading = true;
+    private bool showNewTemplateDialog = false;
+    private bool showImageUrlDialog = false;
+    private string imageUrlInput = string.Empty;
+    private string snackbarMessage = string.Empty;
+    private Blazorise.Snackbar.Snackbar snackbar;
+    private LoadingIndicator loadingIndicator;
+    private string _placeholder = "Write HTML content here...";
+    public int SelectedTemplateRowId { get; set; } = 0;
+    private List<string> projectTokens = new();
+
+    private class TemplateRow
+    {
+        public int Id { get; set; }
+        public string ReportName { get; set; } = string.Empty;
+        public int ReportTypeId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var email = authState.User.Identity?.Name;
+            if (string.IsNullOrWhiteSpace(email)) { snackbarMessage = "User not authenticated."; return; }
+            var compGuidStr = await PricingService.GetUserCompanyGuidAsync(email);
+            if (!Guid.TryParse(compGuidStr, out var compGuid)) { snackbarMessage = "Invalid company guid."; return; }
+            company = await PricingService.GetCompanyAsync(compGuid);
+            reportTypes = await PricingService.GetAllCompanyReportTypesAsync();
+            var allTemplates = await PricingService.GetCompanyHTMLReportTemplatesByCompanyAsync(compGuid.ToString());
+            templates = allTemplates.Select(obj => new TemplateRow
+            {
+                Id = obj.Id,
+                ReportName = obj.ReportName,
+                ReportTypeId = obj.ReportTypeId
+            }).ToList();
+
+            InitNewTemplate(compGuid);
+            InitTokens();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading data for CompanyHTMLReportEditHost");
+            company = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void InitTokens() => projectTokens = ProjectTemplateTokens.All.ToList();
+
+    private void InitNewTemplate(Guid companyGuid) => newTemplate = new()
+    {
+        CompanyGuid = companyGuid,
+        CompanyName = company?.CompanyName ?? string.Empty,
+        ReportHTMLText = "<p></p>",
+        IsActive = true,
+        IsGlobalTemplate = false,
+        DisplayOrder = 100,
+        LastUpdatedDateTime = DateTime.UtcNow
+    };
+
+    private async Task OnTemplateRowChanged(int rowId)
+    {
+        SelectedTemplateRowId = rowId;
+        var meta = templates.FirstOrDefault(t => t.Id == rowId);
+        if (meta != null)
+            await LoadReportForReportType(meta.ReportTypeId);
+    }
+
+    private async Task LoadReportForReportType(int reportTypeId)
+    {
+        if (company == null || reportTypeId == 0)
+        {
+            currentReport = new CompanyHTMLReportTemplate
+            {
+                CompanyGuid = company?.Id ?? Guid.Empty,
+                CompanyName = company?.CompanyName ?? string.Empty,
+                ReportTypeId = reportTypeId,
+                ReportHTMLText = "<p></p>",
+                IsActive = true,
+                IsGlobalTemplate = false,
+                DisplayOrder = 1,
+                LastUpdatedDateTime = DateTime.UtcNow
+            };
+            return;
+        }
+        currentReport = await PricingService.GetCompanyHTMLReportTemplateByTypeAndCompanyAsync(reportTypeId, company.Id.ToString())
+                       ?? new CompanyHTMLReportTemplate
+                       {
+                           CompanyGuid = company.Id,
+                           CompanyName = company.CompanyName,
+                           ReportTypeId = reportTypeId,
+                           ReportHTMLText = "<p></p>",
+                           IsActive = true,
+                           IsGlobalTemplate = false,
+                           DisplayOrder = 1,
+                           LastUpdatedDateTime = DateTime.UtcNow
+                       };
+        if (string.IsNullOrWhiteSpace(currentReport.ReportHTMLText))
+            currentReport.ReportHTMLText = "<p></p>";
+    }
+
+    private void ShowNewTemplateDialog()
+    {
+        InitNewTemplate(company.Id);
+        newTemplate.ReportName = string.Empty;
+        newTemplate.ReportTypeId = 0;
+        showNewTemplateDialog = true;
+    }
+
+    private void CancelNewTemplate() => showNewTemplateDialog = false;
+
+    private Task OnNewTemplateReportTypeChanged(int newTypeId)
+    {
+        newTemplate.ReportTypeId = newTypeId;
+        if (newTypeId > 0 && string.IsNullOrWhiteSpace(newTemplate.ReportName))
+        {
+            var rt = reportTypes?.FirstOrDefault(r => r.Id == newTypeId);
+            if (rt != null) newTemplate.ReportName = rt.ReportTypeName + " Template";
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateNewTemplate()
+    {
+        if (newTemplate.ReportTypeId == 0) { snackbarMessage = "Select a report type."; await snackbar.Show(); return; }
+        if (string.IsNullOrWhiteSpace(newTemplate.ReportName)) { snackbarMessage = "Enter a report name."; await snackbar.Show(); return; }
+        try
+        {
+            newTemplate.LastUpdatedDateTime = DateTime.UtcNow;
+            await PricingService.CreateCompanyHTMLReportTemplateAsync(newTemplate);
+            templates.Add(new TemplateRow { Id = newTemplate.Id, ReportName = newTemplate.ReportName, ReportTypeId = newTemplate.ReportTypeId });
+            SelectedTemplateRowId = newTemplate.Id;
+            showNewTemplateDialog = false;
+            snackbarMessage = "Template created."; await snackbar.Show();
+            await LoadReportForReportType(newTemplate.ReportTypeId);
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Create failed: {ex.Message}"; await snackbar.Show();
+        }
+    }
+
+    private async Task CopyTokenAsync(string token)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", token);
+            snackbarMessage = $"Copied {token}"; await snackbar.Show();
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Copy failed: {ex.Message}"; await snackbar.Show();
+        }
+    }
+
+    private async Task InsertImageFromUrl()
+    {
+        if (string.IsNullOrWhiteSpace(imageUrlInput)) { showImageUrlDialog = false; return; }
+        try
+        {
+            currentReport.ReportHTMLText += $"<p><img src=\"{imageUrlInput}\" style=\"max-width:100%;height:auto;\" /></p>";
+            showImageUrlDialog = false;
+            imageUrlInput = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Image insert failed: {ex.Message}"; await snackbar.Show();
+        }
+    }
+
+     private static string NormalizeQuoteEscapes(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+            // Replace escaped quotes (\") with a plain double-quote (")
+            return input.Replace("\\\"", "\"");
+        }
+
+    private async Task OnSaveReport()
+    {
+        if (currentReport == null) return;
+        try
+        {
+            currentReport.LastUpdatedDateTime = DateTime.UtcNow;
+            currentReport.ReportHTMLText = NormalizeQuoteEscapes(currentReport.ReportHTMLText);
+            await PricingService.UpdateCompanyHTMLReportTemplateAsync(currentReport);
+            snackbarMessage = "Report saved."; await snackbar.Show();
+        }
+        catch (Exception ex)
+        {
+            snackbarMessage = $"Save failed: {ex.Message}"; await snackbar.Show();
+        }
+    }
+
+        #region
+        void OnPaste(HtmlEditorPasteEventArgs args)
+        {
+            //console.Log($"Paste: {args.Html}");
+        }
+
+        void OnChange(string html)
+        {
+           // console.Log($"Change: {html}");
+        }
+
+        void OnInput(string html)
+        {
+            //console.Log($"Input: {html}");
+        }
+
+        void OnExecute(HtmlEditorExecuteEventArgs args)
+        {
+            //console.Log($"Execute: {args.CommandName}");
+        }
+
+        void OnUploadComplete(UploadCompleteEventArgs args)
+        {
+            //console.Log($"Upload complete: {args.RawResponse}");
+        }
+    #endregion
+}

@@ -1,0 +1,97 @@
+﻿@page "/OnlineQuoteProjectSelection"
+@layout NoMenuLayout
+
+@inject ILogger<NoMenuLayout> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+
+
+<h3>Online Quote Project Selection</h3>
+<CardDeck>
+    <Card>
+        <CardImage Source="images/house-interior.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Residential Interior Painting</CardTitle>
+            <CardText>
+                Build a Quote for a house interior.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowResidentialInteriorQuote" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+    <Card>
+        <CardImage Source="images/house-exterior.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Residential Exterior Painting</CardTitle>
+            <CardText>
+                Build a Quote for a house exterior.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>    
+    <Card>
+        <CardImage Source="images/house-cabinets.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Residential Cabinet Painting</CardTitle>
+            <CardText>
+                Build a Quote for a house cabinets.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+    <Card>
+        <CardImage Source="images/house-fence-long.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Residential Fence Staining</CardTitle>
+            <CardText>
+                Build a Quote for a house fence.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+    <Card>
+        <CardImage Source="images/house-deck.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Residential Deck Staining</CardTitle>
+            <CardText>
+                Build a Quote for a house deck.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+    <Card>
+        <CardImage Source="images/commercial-exterior.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Commercial Exterior Painting</CardTitle>
+            <CardText>
+                Build a Quote for a commercial exterior.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+    <Card>
+        <CardImage Source="images/commercial-interior.jpg" />
+        <CardBody>
+            <CardTitle Size="5">Commercial Interior Painting</CardTitle>
+            <CardText>
+                Build a Quote for a commercial interior.
+            </CardText>
+            <Button Color="Color.Primary" Clicked="@ShowQuote" Disabled="true" Block>Get Quote</Button>
+        </CardBody>
+    </Card>
+</CardDeck>
+
+@code {
+
+        public void  ShowResidentialInteriorQuote()
+        {
+            NavigationManager.NavigateTo("pricing/projectentrymain/1c6c9539-1534-43e7-8b6f-5cacfaebcd9f/0");
+        }
+
+        public void  ShowQuote()
+        {
+            NavigationManager.NavigateTo("pricing/projectentrymain/1c6c9539-1534-43e7-8b6f-5cacfaebcd9f/0");
+        }
+}

@@ -1,0 +1,152 @@
+@page "/painttype"
+
+@inject HttpClient Http
+@inject ILogger<PaintTypeComponent> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@rendermode InteractiveWebAssembly
+
+<h3>All Paints</h3>
+<DxGrid Data="@PaintTypes"
+        EditModelSaving="Grid_EditModelSaving"
+        CustomizeEditModel="Grid_CustomizeEditModel"
+        DataItemDeleting="Grid_DataItemDeleting"
+        EditMode="GridEditMode.PopupEditForm"
+        @ref="MyGrid">
+    <Columns>
+        <DxGridDataColumn FieldName="PaintTypeName" Caption="Name" />
+        <DxGridDataColumn FieldName="PaintBrandId" Caption="Brand">
+            <CellDisplayTemplate>
+                @{
+                    var paintBrandId = ((PaintType)context.DataItem).PaintBrandId;
+                    var paintBrand = PaintBrands.FirstOrDefault(x => x.Id == paintBrandId);
+                    if (paintBrand != null)
+                    {
+                        <span>@paintBrand.PaintBrandName</span>
+                    }
+                }
+            </CellDisplayTemplate>
+        </DxGridDataColumn>
+        <DxGridDataColumn FieldName="PaintSheenId" Caption="Sheen">
+            <CellDisplayTemplate>
+                @{
+                    var paintSheenId = ((PaintType)context.DataItem).PaintSheenId;
+                    var paintSheen = PaintSheens.FirstOrDefault(x => x.Id == paintSheenId);
+                    if (paintSheen != null)
+                    {
+                        <span>@paintSheen.PaintSheenName</span>
+                    }
+                }
+            </CellDisplayTemplate>
+        </DxGridDataColumn>
+        <DxGridDataColumn FieldName="CoverageOneCoatSqFt" Caption="Coat SqFt" />
+        <DxGridDataColumn FieldName="CoverageTwoCoatsSqFt" Caption="2 Coat SqFt" />
+        <DxGridDataColumn FieldName="PricePerGallon" Caption="Price" DisplayFormat="C" />
+        <DxGridCommandColumn Width="180px">
+               <HeaderTemplate>
+            <DxButton Click="() => MyGrid.StartEditNewRowAsync()" Text="New" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Small" />
+            </HeaderTemplate>
+            <CellDisplayTemplate>
+            @{
+                    <Blazicon Svg="Ionicon.Pencil" Style="margin-right: 10px;" @onclick="() => MyGrid.StartEditDataItemAsync(context.DataItem)" />
+                    <Blazicon Svg="Ionicon.TrashBin" Style="margin-right: 10px;" @onclick="() => MyGrid.ShowDataItemDeleteConfirmation(context.DataItem)" />
+                }
+            </CellDisplayTemplate>
+        </DxGridCommandColumn>
+    </Columns>
+    <EditFormTemplate Context="EditFormContext">
+        @{
+            var newPaintType = (PaintType)EditFormContext.EditModel;
+        }
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Paint Name" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <DxTextBox @bind-Text="@newPaintType.PaintTypeName" />
+            </DxFormLayoutItem>
+              <DxFormLayoutItem Caption="Company" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+            <DxComboBox Data="@PaintBrands"
+                TextFieldName="@nameof(PaintBrand.PaintBrandName)"
+                ValueFieldName="@nameof(PaintBrand.Id)"
+                @bind-Value="@newPaintType.PaintBrandId" />
+            </DxFormLayoutItem> 
+            <DxFormLayoutItem Caption="Coverage SqFt" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <DxSpinEdit @bind-Value="@newPaintType.CoverageOneCoatSqFt" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Coverage Two Coat SqFt" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <DxSpinEdit @bind-Value="@newPaintType.CoverageTwoCoatsSqFt" />
+            </DxFormLayoutItem>
+             <DxFormLayoutItem Caption="Paint Sheen" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+            <DxComboBox Data="@PaintSheens"
+            TextFieldName="@nameof(PaintSheen.PaintSheenName)"
+            ValueFieldName="@nameof(PaintSheen.Id)"
+            @bind-Value="@newPaintType.PaintSheenId" />
+            </DxFormLayoutItem> 
+            <DxFormLayoutItem Caption="Gal Price" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                <DxSpinEdit @bind-Value="@newPaintType.PricePerGallon" DisplayFormat="C" CssClass="cw-320" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </EditFormTemplate>
+</DxGrid>
+
+
+@code {
+    public bool isBusy { get; set; } = false;
+    public List<PaintType> PaintTypes { get; set; }
+    public List<PaintSheen> PaintSheens { get; set; }
+    public List<PaintBrand> PaintBrands { get; set; }
+    private IPricingService pricingService;
+    public IGrid MyGrid { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        await UpdateDataAsync();
+    }
+
+    async Task Grid_CustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (!e.IsNew)
+            return;
+
+        var newPaintType = new PaintType();
+        newPaintType.PaintTypeName = "";
+        newPaintType.PricePerGallon = 0;
+        newPaintType.CoverageOneCoatSqFt = 300;
+        newPaintType.CoverageTwoCoatsSqFt = 450;        
+
+        e.EditModel = newPaintType;
+    }
+
+    async Task Grid_EditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        var paintType = (PaintType)e.EditModel;
+
+        if (e.IsNew)
+        {
+            //     paintType.PaintBrandId = paintType.PaintBrand.Id;
+            //     paintType.PaintSheenId = paintType.PaintSheen.Id;
+            await pricingService.CreatePaintTypeAsync(paintType);
+        }
+        else
+        {
+            await pricingService.UpdatePaintTypeAsync(paintType);
+        }
+       // await UpdateDataAsync();
+    }
+
+    async Task Grid_DataItemDeleting(GridDataItemDeletingEventArgs e)
+    {
+        await pricingService.DeletePaintTypeAsync(((PaintType)e.DataItem).Id);
+        await UpdateDataAsync();
+    }
+
+    async Task UpdateDataAsync()
+    {
+        isBusy = true;
+        PaintTypes = await pricingService.GetAllPaintTypesAsync();
+        PaintSheens = await pricingService.GetAllPaintSheensAsync();
+        PaintBrands = await pricingService.GetAllPaintBrandsAsync();
+        isBusy = false;
+    }
+
+}

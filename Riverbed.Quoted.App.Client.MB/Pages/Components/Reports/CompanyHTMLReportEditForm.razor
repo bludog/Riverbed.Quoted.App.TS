@@ -1,0 +1,102 @@
+@page "/company-html-report-edit"
+@inject NavigationManager NavigationManager
+@using Blazorise
+@using Blazorise.RichTextEdit
+@rendermode InteractiveWebAssembly
+
+<Card>
+    <CardBody>
+        <Field>
+            <FieldLabel>Report Type</FieldLabel>
+            <Select TValue="int" @bind-SelectedValue="Report.ReportTypeId">
+                <SelectItem Value="0">Select a Report Type</SelectItem>
+                @foreach (var reportType in ReportTypes)
+                {
+                    <SelectItem Value="@reportType.Id">@reportType.ReportTypeName</SelectItem>
+                }
+            </Select>
+        </Field>
+
+        <Field>
+            <FieldLabel>Content</FieldLabel>
+            <RichTextEdit @ref="richTextEdit"
+                         Theme="RichTextEditTheme.Snow"
+                         Style="height: 400px;"
+                         @bind-Value="@Report.ReportHTMLText"
+                         >
+                <Toolbar>
+                    <RichTextEditToolbarGroup>
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Bold" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Italic" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Underline" />
+                        <RichTextEditToolbarSelect Action="RichTextEditAction.Size">
+                            <RichTextEditToolbarSelectItem Value="small" />
+                            <RichTextEditToolbarSelectItem Selected />
+                            <RichTextEditToolbarSelectItem Value="large" />
+                            <RichTextEditToolbarSelectItem Value="huge" />
+                        </RichTextEditToolbarSelect>
+                        <RichTextEditToolbarButton Action="RichTextEditAction.List" Value="ordered" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.List" Value="bullet" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Align" Value="left" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Align" Value="center" />
+                        <RichTextEditToolbarButton Action="RichTextEditAction.Align" Value="right" />
+                    </RichTextEditToolbarGroup>
+                    <RichTextEditToolbarGroup Float="Float.End">
+                        <Button onClick="window.open('https://www.quilljs.com/','quilljs')"><Icon Name="IconName.InfoCircle" /></Button>
+                        <Button Clicked="@HandleSave"><Icon Name="IconName.Save" /></Button>
+                    </RichTextEditToolbarGroup>
+                </Toolbar>
+            </RichTextEdit>
+        </Field>
+    </CardBody>
+</Card>
+
+@code {
+    [Parameter]
+    public CompanyHTMLReportTemplate Report { get; set; } = new();
+
+    [Parameter] 
+    public List<CompanyReportType> ReportTypes { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<CompanyHTMLReportTemplate> OnSaveReport { get; set; }
+
+    private RichTextEdit richTextEdit;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Report.ReportHTMLText == null)
+        {
+            Report.ReportHTMLText = string.Empty;
+        }        
+        if (Report.ReportTypeId == 0 && ReportTypes.Count > 0)
+        {
+            Report.ReportTypeId = ReportTypes[0].Id;
+        }
+        
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await richTextEdit.SetHtmlAsync(Report.ReportHTMLText);
+            await richTextEdit.OnContentChanged();
+            
+            StateHasChanged();
+        }
+    }
+
+    private Task OnContentChanged(string value)
+    {
+        Report.ReportHTMLText = value;
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleSave()
+    {
+        Report.ReportHTMLText = await richTextEdit.GetHtmlAsync();
+        Report.LastUpdatedDateTime = DateTime.Now;
+        await OnSaveReport.InvokeAsync(Report);
+    }
+}

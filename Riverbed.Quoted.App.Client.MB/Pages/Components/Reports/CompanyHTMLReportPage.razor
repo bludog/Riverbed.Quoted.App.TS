@@ -1,0 +1,28 @@
+@page "/reports/company-html-report-page/{ProjectGuid:guid}/{ReportTypeId:int}"
+@layout NoMenuLayout
+@using Blazorise
+@inject Riverbed.Pricing.Paint.Shared.Services.IPricingService PricingService
+@rendermode InteractiveWebAssembly
+
+
+@if (Report != null)
+{
+    <div style="width:100%; height:100%; overflow:auto;">
+        @((MarkupString)Report.ReportHTMLText)
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public Guid? ProjectGuid { get; set; }
+    [Parameter]
+    public int ReportTypeId { get; set; }
+
+    private CompanyHTMLReport? Report;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Report = await PricingService.GetCompanyHTMLReportByTypeAndProjectAsync(ReportTypeId, ProjectGuid.ToString());
+    }
+}

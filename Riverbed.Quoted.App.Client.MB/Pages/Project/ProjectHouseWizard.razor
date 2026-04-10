@@ -1,0 +1,293 @@
+@page "/pricing/project-house-wizard/{ProjectId}"
+
+@inject ILogger<ProjectHouseWizard> Logger
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+@inject IPricingService IPricingService
+@inject ILoadingIndicatorService LoadingIndicatorService
+@layout NoMenuLayout
+@rendermode InteractiveWebAssembly
+
+<LoadingIndicator @ref="loadingIndicator">
+    <Div Display="Display.Flex" Class="justify-content-center">
+        <CardDeck>
+            <Card Shadow="Shadow.Default" Border="Border.Rounded">
+                <Column  Padding="Padding.Is3" ColumnSize="ColumnSize.Is12.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                    <Heading Size="HeadingSize.Is3">House Wizard</Heading>
+                    @if (allRooms.Count <= 0)
+                    {
+                    <Label>House Size</Label>
+                    <Select @bind-SelectedValue="@selectedRoomIndex">
+                        <SelectItem Value="0">Select</SelectItem>
+                        <SelectItem Value="1">1 Room Unit/Apartment</SelectItem>
+                        <SelectItem Value="2">2 Bedroom House</SelectItem>
+                        <SelectItem Value="3">3 Bedroom House</SelectItem>
+                        <SelectItem Value="4">4 Bedroom House</SelectItem>
+                        <SelectItem Value="5">5 Bedroom House</SelectItem>
+                    </Select>
+                    <Label>Ceiling Height</Label>
+                    <Select @bind-SelectedValue="@selectedCeilingHeight">
+                        <SelectItem Value="0">Select</SelectItem>
+                        <SelectItem Value="8">8ft Height</SelectItem>
+                        <SelectItem Value="9">9ft Height</SelectItem>
+                        <SelectItem Value="10">10ft Height</SelectItem>
+                        <SelectItem Value="11">11ft Height</SelectItem>
+                    </Select>
+
+                    <Fields VerticalAlignment="Blazorise.VerticalAlignment.Middle" Model="@roomOptions">
+                        <Field ColumnSize="ColumnSize.Is12">
+                            <Label for="PaintQualityId">Paint Quality</Label>
+                            <Select @bind-SelectedValue="@roomOptions.PaintQualityId">
+                                <SelectItem Value="0">Select Paint Quality</SelectItem>
+                                @foreach (var paintQuality in paintQualities)
+                                {
+                                    <SelectItem Value="@paintQuality.Id">@paintQuality.PaintQualityName</SelectItem>
+                                }
+                            </Select>
+                        </Field>
+                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                            <Check TValue="bool" @bind-Checked="@roomOptions.IncludeWalls">Include Walls</Check>
+                        </Field>
+                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                            <Check TValue="bool" @bind-Checked="@roomOptions.IncludeCeilings">Include Ceiling</Check>
+                        </Field>
+                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                            <Check TValue="bool" @bind-Checked="@roomOptions.IncludeDoors">Include Doors</Check>
+                        </Field>
+                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                            <Check TValue="bool" @bind-Checked="@roomOptions.IncludeBaseboards">Include Baseboards</Check>
+                        </Field>
+                        <Field ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile.Is12.OnTablet">
+                            <Check TValue="bool" @bind-Checked="@roomOptions.IncludeCrownMoldings">Include Crown Moldings</Check>
+                        </Field>
+                    </Fields>
+                    <Div Flex="Flex.JustifyContent.End.AlignItems.End">
+                        <Button Color="Color.Primary" Clicked="CreateRoomList" Disabled="@(selectedRoomIndex <= 0 || selectedCeilingHeight <= 0 || allRooms.Count > 0)">Create Rooms</Button>
+                    </Div>
+                    <br />
+                    }
+
+                    @{
+                        // Create a Blazorise Repeater to display each room in a TableRow with a checkbox and input fields
+                        if (allRooms.Count > 0)
+                        {          
+                            <Div Flex="Flex.JustifyContent.End.AlignItems.End">
+                                <Button Color="Color.Link" Size="Size.Small" Clicked="ShowAddRoomModal">Add Room</Button>
+                            </Div>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHeaderCell></TableHeaderCell>
+                                        <TableHeaderCell>Room </TableHeaderCell>
+                                        <TableHeaderCell>Width</TableHeaderCell>
+                                        <TableHeaderCell>Length</TableHeaderCell>
+                                        <TableHeaderCell>Height</TableHeaderCell>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    <Repeater Items="@allRooms">
+                                        <TableRow>
+                                            <TableRowCell>
+                                                <Check @bind-Checked="@context.IncludeRoom" />
+                                            </TableRowCell>
+                                            <TableRowCell>@context.Name</TableRowCell>
+                                            <TableRowCell>
+                                                <NumericEdit Size="Size.Small" @bind-Value="@context.Width" />
+                                            </TableRowCell>
+                                            <TableRowCell>
+                                                <NumericEdit Size="Size.Small" @bind-Value="@context.Length" />
+                                            </TableRowCell>
+                                            <TableRowCell>
+                                                <NumericEdit Size="Size.Small" @bind-Value="@context.Height" />
+                                            </TableRowCell>
+                                        </TableRow>
+                                    </Repeater>
+                                </TableBody>
+                                <TableFooter>
+                                  
+                                </TableFooter>                              
+                            </Table>                           
+                        }
+                    }
+                </Column>
+            </Card>
+        </CardDeck>
+    </Div>
+    <br />
+    <Div Display="Display.Flex" Class="justify-content-center" Margin="Margin.Is5.FromBottom">
+        <Button Color="Color.Secondary" Margin="Margin.Is2.FromEnd" Clicked="() => Cancel()">
+            Cancel
+        </Button>
+        <Button Color="Color.Primary" Clicked="() => SaveRooms()" Disabled="@(activateNext == false)">
+            Save
+        </Button>
+    </Div>
+
+    <Modal @ref="modalAddRoom">
+        <ModalContent Centered="true">
+            <ModalHeader>
+                <Heading Size="HeadingSize.Is4">Add Room</Heading>
+            </ModalHeader>
+            <ModalBody>
+                <Field>
+                    <Label>Room Name</Label>
+                    <TextEdit @bind-Text="@newRoomName" />
+                </Field>
+            </ModalBody>
+            <ModalFooter>
+                <Button Color="Color.Secondary" Clicked="HideAddRoomModal">Cancel</Button>
+                <Button Color="Color.Primary" Clicked="AddRoom" Disabled="false">Add</Button>
+            </ModalFooter>
+        </ModalContent>
+    </Modal>
+</LoadingIndicator>
+
+
+@code {
+    [Parameter]
+    public string ProjectId { get; set; }
+    public int selectedRoomIndex { get; set; } = 0;
+    public int selectedCeilingHeight { get; set; } = 0;
+    public RoomGlobalDefaults roomOptions { get; set; } = new RoomGlobalDefaults();
+    public bool activateNext { get; set; } = false;
+    public CompanyCustomer companyCustomer { get; set; } = new CompanyCustomer();
+    public List<PaintQuality> paintQualities { get; set; } = new List<PaintQuality>();
+    public List<SingleRoom> allRooms { get; set; } = new List<SingleRoom>();
+    public IPricingService pricingService { get; set; }
+    public LoadingIndicator loadingIndicator { get; set; }
+    public string newRoomName { get; set; }
+    private Modal modalAddRoom { get; set; }
+
+    public class SingleRoom
+    {
+        public string Name { get; set; }
+        public bool IncludeRoom { get; set; }
+        public int Width { get; set; }
+        public int Length { get; set; }
+        public int Height { get; set; }
+        public int NumberOfDoors { get; set; }
+        public int NumberOfWindows { get; set; }
+        public float AdditionalPrepTime { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pricingService = IPricingService;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (!authState.User.Identity.IsAuthenticated)
+        {
+            //NavigationManager.NavigateTo("Account/Login");
+        }
+        else
+        {
+
+        }
+    }
+
+    public override async Task SetParametersAsync(ParameterView parameters)
+    {
+        await base.SetParametersAsync(parameters);
+        await LoadData();
+    }
+
+    public async void SaveRooms()
+    {
+        await loadingIndicator.Show();
+        var project = await pricingService.GetCustomerProjectAsync(ProjectId);
+        foreach (var room in allRooms)
+        {
+            if (room.IncludeRoom)
+            {
+                var roomToSave = new Room
+                    {
+                        ProjectDataId = project.Id,
+                        ProjectGuid = project.ProjectGuid,
+                        Name = room.Name,
+                        Width = room.Width,
+                        Length = room.Length,
+                        Height = room.Height,
+                        PaintQualityId = roomOptions.PaintQualityId,
+                        IncludeWalls = roomOptions.IncludeWalls,
+                        IncludeCeilings = roomOptions.IncludeCeilings,
+                        IncludeDoors = roomOptions.IncludeDoors,
+                        IncludeBaseboards = roomOptions.IncludeBaseboards,
+                        IncludeCrownMoldings = roomOptions.IncludeCrownMoldings,
+                        AdditionalPrepTime = 0.5f,
+                        NumberOfDoors = room.NumberOfDoors,
+                        NumberOfWindows = room.NumberOfWindows,
+                        AreaTotal = room.Width * room.Length,
+                        Notes = "",
+                        LaborCost = 0,
+                        MaterialCost = 0
+                    };
+
+                var newRoom = await pricingService.CreateRoomAsync(roomToSave);
+                var pricedRoom = await pricingService.PriceRoomInteriorAsync(newRoom.Id);
+            }
+        }
+        await loadingIndicator.Hide();
+        NavigationManager.NavigateTo($"pricing/projectentrymain/{ProjectId}");
+    }
+
+    private void Cancel()
+    {
+        NavigationManager.NavigateTo($"pricing/projectentrymain/{ProjectId}");
+    }
+
+    public async Task LoadData()
+    {
+        paintQualities = await pricingService.GetAllPaintQualitiesAsync();
+        roomOptions = await pricingService.GetRoomGlobalDefaultsAsync();
+        StateHasChanged();
+    }
+
+    // Create a list of Default rooms based on the dropdown selections
+    public async Task CreateRoomList()
+    {
+        allRooms.Clear();
+
+        allRooms.Add(new SingleRoom { Name = "Living Room", IncludeRoom = true, Width = 20, Length = 16, Height = selectedCeilingHeight, NumberOfDoors = 2, NumberOfWindows = 4, AdditionalPrepTime = 1.5f });
+        allRooms.Add(new SingleRoom { Name = "Kitchen", IncludeRoom = true, Width = 10, Length = 10, Height = selectedCeilingHeight, NumberOfDoors = 2, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+        allRooms.Add(new SingleRoom { Name = "Hall Bath", IncludeRoom = true, Width = 5, Length = 7, Height = selectedCeilingHeight, NumberOfDoors = 1, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+        allRooms.Add(new SingleRoom { Name = "Hallway", IncludeRoom = true, Width = 10, Length = 4, Height = selectedCeilingHeight, NumberOfDoors = 0, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+        allRooms.Add(new SingleRoom { Name = "Master Bathroom", IncludeRoom = true, Width = 10, Length = 10, Height = selectedCeilingHeight, NumberOfDoors = 1, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+
+
+        if(selectedRoomIndex > 1)
+        {
+            allRooms.Add(new SingleRoom { Name = "Laundry Room", IncludeRoom = true, Width = 8, Length = 6, Height = selectedCeilingHeight, NumberOfDoors = 1, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+            allRooms.Add(new SingleRoom { Name = "Master Bedroom", IncludeRoom = true, Width = 17, Length = 12, Height = selectedCeilingHeight, NumberOfDoors = 2, NumberOfWindows = 2, AdditionalPrepTime = 1.0f });
+            allRooms.Add(new SingleRoom { Name = "Foyer", IncludeRoom = true, Width = 12, Length = 11, Height = selectedCeilingHeight, NumberOfDoors = 1, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });            
+        }   
+
+        for (int i = 1; i < selectedRoomIndex; i++)
+        {
+            allRooms.Add(new SingleRoom { Name = "Bedroom " + (i + 1), IncludeRoom = true, Width = 12, Length = 11, Height = selectedCeilingHeight, NumberOfDoors = 2, NumberOfWindows = 1, AdditionalPrepTime = 0.5f });
+        }
+
+        activateNext = true;
+        StateHasChanged();
+    }
+
+    public void ShowAddRoomModal()
+    {
+        modalAddRoom.Show();
+    }
+
+    public void HideAddRoomModal()
+    {
+        modalAddRoom.Hide();
+    }
+
+    public void AddRoom()
+    {
+        if (!string.IsNullOrEmpty(newRoomName))
+        {
+            allRooms.Add(new SingleRoom { Name = newRoomName, IncludeRoom = true, Width = 12, Length = 11, Height = selectedCeilingHeight, NumberOfDoors = 1, NumberOfWindows = 0, AdditionalPrepTime = 0.5f });
+            newRoomName = string.Empty;
+            modalAddRoom.Hide();
+            StateHasChanged();
+        }
+    }
+}
+
