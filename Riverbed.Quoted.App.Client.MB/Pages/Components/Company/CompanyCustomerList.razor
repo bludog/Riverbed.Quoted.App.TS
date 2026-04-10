@@ -1,4 +1,5 @@
 @page "/company-customer-list"
+@using MudBlazor
 
 @inject ILogger<CompanyCustomerList> Logger
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -7,77 +8,82 @@
 @rendermode InteractiveWebAssembly
 @attribute [Authorize]
 
-<LoadingIndicator @ref="loadingIndicator">
-    <Layout>
-        <!-- Sticky header row with link to CompanyCustomerList on the right -->
-        <Div Class="sticky-top bg-white border-bottom">
-            <Div Class="container">
-                <Div Class="row py-2">
-                    <Div Class="col text-end">
-                        <a href="project/quoted-projects" class="btn btn-link">Project List</a>
-                    </Div>
-                </Div>
-            </Div>
-        </Div>
-        <br/>
-        <Div class="d-flex w-100 justify-content-between align-items-center">
-            <InputText @bind-Value="searchTerm" placeholder="Search by first or last name..." class="form-control me-2" style="max-width: 300px;" />
-            <Button Color="Color.Link" Clicked="HandleNew">New</Button>
-        </Div>
-        <p/>
-        <ListGroup Flush Mode="ListGroupMode.Selectable" @bind-SelectedItem="@selectedItem" Clicked="OnItemClicked">
-            <Repeater Items="@filteredCompanyCustomerList">
-                <ListGroupItem Name="@context.Id.ToString()">
-                    <Heading Size="HeadingSize.Is5" Margin="Margin.Is1.FromBottom">
-                        <Badge Color="Color.Success" Pill>1</Badge> @context.LastName, @context.FirstName
-                    </Heading>
-                    <Div Flex="Flex.JustifyContent.Between.AlignItems.Center">
-                        <Paragraph Margin="Margin.Is1.FromBottom">
-                            @context.City, @context.StateCode @context.ZipCode
-                        </Paragraph>
-                        <Button Color="Color.Link" Clicked="() => OnItemClicked(context.CustomerId.ToString())">
-                            <Icon Name="IconName.ChevronRight" IconSize="IconSize.Large" />
-                        </Button>
-                    </Div>
-                    <Small>@context.CreatedDate.ToString()</Small>
-                    <Button Size="Size.Small" Color="Color.Link"
-                            Clicked="@(() => {customerToDelete = context; modalRef.Show();})">
-                        Delete
-                    </Button>
-                </ListGroupItem>
-            </Repeater>
-        </ListGroup>
-    </Layout>
-</LoadingIndicator>
+<style>
+    .customer-meta-text {
+        color: #9aa0a6 !important;
+    }
+</style>
 
-<Modal @ref="modalRef">
-    <ModalContent Centered>
-        <ModalHeader >
-            <ModalTitle>Confirm Delete</ModalTitle>
-            <CloseButton />
-        </ModalHeader>
-        <ModalBody>
-            Are you sure you want to delete <b>@customerToDelete?.FirstName @customerToDelete?.LastName</b>?
-        </ModalBody>
-        <ModalFooter>
-            <Button Color="Color.Secondary" Clicked="@HideModal">Cancel</Button>
-            <Button Color="Color.Primary" Clicked="DeleteCustomerAsync">Confirm</Button>
-        </ModalFooter>
-    </ModalContent>
-</Modal>
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="MudBlazor.AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+        <MudText Typo="Typo.h5">Customer List</MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="MudBlazor.Variant.Outlined" Href="/project/quoted-projects" StartIcon="@Icons.Material.Filled.Folder">Project List</MudButton>
+            <MudButton Variant="MudBlazor.Variant.Filled" Color="MudBlazor.Color.Primary" OnClick="HandleNew" StartIcon="@Icons.Material.Filled.Add">New</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudTextField T="string" @bind-Value="searchTerm" Placeholder="Search by first or last name..." Variant="MudBlazor.Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Class="mb-4" />
+
+    @if (isLoading)
+    {
+        <MudStack AlignItems="MudBlazor.AlignItems.Center" Class="py-8">
+            <MudProgressCircular Indeterminate="true" Color="MudBlazor.Color.Primary" />
+        </MudStack>
+    }
+    else if (filteredCompanyCustomerList.Any())
+    {
+        <MudList T="CompanyCustomer" Dense="true">
+            @foreach (var customer in filteredCompanyCustomerList)
+            {
+                <MudListItem T="CompanyCustomer" Class="mb-2">
+                    <MudPaper Class="pa-3 w-100" Elevation="0" Outlined="true">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="MudBlazor.AlignItems.Start">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.subtitle1">@customer.LastName, @customer.FirstName</MudText>
+                                <MudText Typo="Typo.caption" Class="customer-meta-text">@customer.City, @customer.StateCode @customer.ZipCode</MudText>
+                                <MudText Typo="Typo.caption" Class="customer-meta-text">Created: @(customer.CreatedDate?.ToString("MMM d, yyyy") ?? "-")</MudText>
+                            </MudStack>
+
+                            <MudStack Row="true" Spacing="1">
+                                <MudButton Variant="MudBlazor.Variant.Text" Color="MudBlazor.Color.Primary" OnClick="@(() => OnItemClicked(customer.CustomerId.ToString()))">View</MudButton>
+                                <MudButton Variant="MudBlazor.Variant.Text" Color="MudBlazor.Color.Error" OnClick="@(() => ConfirmDelete(customer))">Delete</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                </MudListItem>
+            }
+        </MudList>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Variant="MudBlazor.Variant.Outlined">No customers found.</MudAlert>
+    }
+</MudPaper>
+
+@if (showDeleteDialog && customerToDelete is not null)
+{
+    <MudOverlay Visible="true" DarkBackground="true" ZIndex="2000" AutoClose="false">
+        <MudPaper Class="pa-4" Style="width: 420px; max-width: 90vw; margin: 20vh auto 0 auto;">
+            <MudText Typo="Typo.h6" Class="mb-2">Confirm Delete</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4">Are you sure you want to delete @customerToDelete.FirstName @customerToDelete.LastName?</MudText>
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                <MudButton Variant="MudBlazor.Variant.Text" OnClick="CancelDelete">Cancel</MudButton>
+                <MudButton Variant="MudBlazor.Variant.Filled" Color="MudBlazor.Color.Error" OnClick="DeleteCustomerAsync">Delete</MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudOverlay>
+}
 
 @code {
     public string _companyGuid { get; set; }
     public IEnumerable<CompanyCustomer> companyCustomerList { get; set; } = new List<CompanyCustomer>();
     public CompanyCustomer companyCustomer { get; set; }
     public int customerId { get; set; } = 0;
-    public string selectedItem = "";
     public IPricingService pricingService { get; set; }
-    private LoadingIndicator loadingIndicator;
-
+    private bool isLoading;
+    private bool showDeleteDialog;
     private CompanyCustomer? customerToDelete;
-
-    private Modal modalRef;
 
     private string searchTerm = string.Empty;
 
@@ -89,16 +95,6 @@
                 (!string.IsNullOrEmpty(c.LastName) && c.LastName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
             );
 
-    private Task ShowModal()
-    {
-        return modalRef.Show();
-    }
-
-    private Task HideModal()
-    {
-        return modalRef.Hide();
-    }
-
     protected override async Task OnInitializedAsync()
     {
         pricingService = IPricingService;
@@ -108,23 +104,13 @@
             NavigationManager.NavigateTo("/login");
             return;
         }
-    }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await loadingIndicator.Show();
-            await LoadData();
-            await loadingIndicator.Hide();
-        }
+        await LoadData();
     }
 
     public async Task OnItemClicked(string item)
     {
-        await loadingIndicator.Show();
         NavigationManager.NavigateTo("company-customer-display/" + item);
-        await loadingIndicator.Hide();
     }
 
     public void HandleNew()
@@ -136,6 +122,7 @@
     {
         try
         {
+            isLoading = true;
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             var user = authState.User;
             var userName = user?.Identity?.Name;
@@ -165,12 +152,7 @@
             Logger.LogInformation("LoadData: Retrieved {Count} customers for company: {CompanyGuid}", companyCustomerList?.Count() ?? 0, _companyGuid);
             
             companyCustomer = companyCustomerList.FirstOrDefault();
-            if (companyCustomer != null)
-            {
-                selectedItem = companyCustomer.Id.ToString();
-                Logger.LogInformation("LoadData: Selected first customer: {CustomerId}", companyCustomer.Id);
-            }
-            else
+            if (companyCustomer == null)
             {
                 Logger.LogWarning("LoadData: No customers found in the list");
             }
@@ -183,23 +165,32 @@
             companyCustomerList = Array.Empty<CompanyCustomer>();
             StateHasChanged();
         }
+        finally
+        {
+            isLoading = false;
+        }
     }
 
     private void ConfirmDelete(CompanyCustomer customer)
     {
         customerToDelete = customer;
+        showDeleteDialog = true;
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteDialog = false;
+        customerToDelete = null;
     }
 
     private async Task DeleteCustomerAsync()
     {
-        if (customerToDelete != null)
+        if (customerToDelete is not null)
         {
-            await loadingIndicator.Show();
+            isLoading = true;
             await pricingService.DeleteCompanyCustomerAsync(customerToDelete.Id);
-            customerToDelete = null;
             await LoadData();
-            await modalRef.Hide();
-            await loadingIndicator.Hide();
+            CancelDelete();
         }
     }
 }

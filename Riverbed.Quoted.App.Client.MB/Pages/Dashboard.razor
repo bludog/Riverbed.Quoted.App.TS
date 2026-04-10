@@ -11,6 +11,16 @@
 @inject IPricingService AppService
 @rendermode InteractiveWebAssembly
 
+<style>
+    .dashboard-muted {
+        color: var(--mud-palette-text-secondary) !important;
+    }
+
+    .mud-theme-dark .dashboard-muted {
+        color: #e8ebf5 !important;
+    }
+</style>
+
 <PageTitle>@companyName Dashboard</PageTitle>
 
 @if (isLoading)
@@ -25,7 +35,7 @@ else if (isLoaded)
         <MudGrid AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.h4">@companyName</MudText>
-                <MudText Typo="Typo.subtitle1" Class="mud-secondary-text">Dashboard</MudText>
+                <MudText Typo="Typo.subtitle1" Class="dashboard-muted">Dashboard</MudText>
             </MudItem>
             <MudItem xs="12" md="6" Class="d-flex gap-2 justify-end flex-wrap">
                 <MudButton Variant="MudBlazor.Variant.Outlined" StartIcon="@Icons.Material.Filled.Public" OnClick="OpenProjectTracker">Project Tracker</MudButton>
@@ -40,21 +50,21 @@ else if (isLoaded)
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Info">@completedJobsYear</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Completed Jobs</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Completed Jobs</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Info">@completedJobsTotalYear.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Success">@wonQuotesYear</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Won Quotes</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Won Quotes</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Success">@wonQuotesTotalYear.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Primary">@activeQuotesYear</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Active Quotes</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Active Quotes</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Primary">@activeQuotesTotalYear.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
@@ -65,21 +75,21 @@ else if (isLoaded)
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Success">@wonQuotesMonth</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Won Quotes</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Won Quotes</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Success">@wonQuotesTotalMonth.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Primary">@activeQuotesMonth</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Active Quotes</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Active Quotes</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Primary">@activeQuotesTotalMonth.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="12" md="4">
             <MudPaper Class="pa-4 text-center" Elevation="1">
                 <MudText Typo="Typo.h3" Color="MudBlazor.Color.Info">@completedJobsMonth</MudText>
-                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Completed Jobs</MudText>
+                <MudText Typo="Typo.subtitle2" Class="dashboard-muted">Completed Jobs</MudText>
                 <MudText Typo="Typo.h6" Color="MudBlazor.Color.Info">@completedJobsTotalMonth.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
@@ -99,15 +109,15 @@ else if (isLoaded)
                         {
                             <MudListItem T="ProjectDataMinimal" Class="cursor-pointer" OnClick="@(() => NavigateToProject(project.ProjectGuid))">
                                 <MudText Typo="Typo.subtitle2">@project.ProjectName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CustomerName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
+                                <MudText Typo="Typo.caption" Class="dashboard-muted">@project.CustomerName</MudText>
+                                <MudText Typo="Typo.caption" Class="dashboard-muted">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
                             </MudListItem>
                         }
                     }
                     else
                     {
                         <MudListItem T="ProjectDataMinimal">
-                            <MudText Typo="Typo.body2" Class="mud-secondary-text">No won projects in the last 2 months</MudText>
+                            <MudText Typo="Typo.body2" Class="dashboard-muted">No won projects in the last 2 months</MudText>
                         </MudListItem>
                     }
                 </MudList>
@@ -127,15 +137,15 @@ else if (isLoaded)
                         {
                             <MudListItem T="ProjectDataMinimal" Class="cursor-pointer" OnClick="@(() => NavigateToProject(project.ProjectGuid))">
                                 <MudText Typo="Typo.subtitle2">@project.ProjectName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CustomerName</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
+                                <MudText Typo="Typo.caption" Class="dashboard-muted">@project.CustomerName</MudText>
+                                <MudText Typo="Typo.caption" Class="dashboard-muted">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
                             </MudListItem>
                         }
                     }
                     else
                     {
                         <MudListItem T="ProjectDataMinimal">
-                            <MudText Typo="Typo.body2" Class="mud-secondary-text">No pending projects in the last 2 months</MudText>
+                            <MudText Typo="Typo.body2" Class="dashboard-muted">No pending projects in the last 2 months</MudText>
                         </MudListItem>
                     }
                 </MudList>
