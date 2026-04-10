@@ -1,6 +1,6 @@
 ﻿@page "/dashboard"
 
-@using Blazorise
+@using MudBlazor
 @using Riverbed.Pricing.Paint.Shared.Data
 
 @attribute [Authorize]
@@ -13,192 +13,139 @@
 
 <PageTitle>@companyName Dashboard</PageTitle>
 
-<LoadingIndicator @ref="loadingIndicator" FullScreen>
-    @if (isLoaded)
-    {
-        <!-- Company Header -->
-        <Card Class="mb-4">
-            <CardBody Background="Background.Primary" Class="text-white">
-                <Div Class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <Div>
-                        <Heading Size="HeadingSize.Is2" Class="mb-0 text-white">@companyName</Heading>
-                        <Text Class="text-white-50">Dashboard</Text>
-                    </Div>
-                    <Div Class="d-flex gap-2 flex-wrap">
-                        <Button Color="Color.Light" Clicked="OpenProjectTracker">
-                            <Icon Name="IconName.Globe" /> Project Tracker
-                        </Button>
-                        <Button Color="Color.Light" Clicked="@(() => NavigationManager.NavigateTo("company-customer-list"))">
-                            <Icon Name="IconName.User" /> Customer List
-                        </Button>
-                        <Button Color="Color.Light" Clicked="@(() => NavigationManager.NavigateTo("project/quoted-projects"))">
-                            <Icon Name="IconName.Folder" /> Project List
-                        </Button>
-                    </Div>
-                </Div>
-            </CardBody>
-        </Card>
+@if (isLoading)
+{
+    <MudPaper Class="pa-6 d-flex justify-center">
+        <MudProgressCircular Color="MudBlazor.Color.Primary" Indeterminate="true" />
+    </MudPaper>
+}
+else if (isLoaded)
+{
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.h4">@companyName</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-secondary-text">Dashboard</MudText>
+            </MudItem>
+            <MudItem xs="12" md="6" Class="d-flex gap-2 justify-end flex-wrap">
+                <MudButton Variant="MudBlazor.Variant.Outlined" StartIcon="@Icons.Material.Filled.Public" OnClick="OpenProjectTracker">Project Tracker</MudButton>
+                <MudButton Variant="MudBlazor.Variant.Outlined" StartIcon="@Icons.Material.Filled.Person" Href="/company-customer-list">Customer List</MudButton>
+                <MudButton Variant="MudBlazor.Variant.Outlined" StartIcon="@Icons.Material.Filled.Folder" Href="/project/quoted-projects">Project List</MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
 
-        <!-- Statistics Cards - Current Year -->
-        <Heading Size="HeadingSize.Is4" Class="mb-3">
-            <Icon Name="IconName.CalendarDay" /> Year to Date (@DateTime.Now.Year)
-        </Heading>
-        <Row Class="mb-4">           
-                 <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-info fw-bold">@completedJobsYear</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Completed Jobs</Heading>
-                        <Text Class="text-info">@completedJobsTotalYear.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column>
-            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-success fw-bold">@wonQuotesYear</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Won Quotes</Heading>
-                        <Text Class="text-success">@wonQuotesTotalYear.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column>
-            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-primary fw-bold">@activeQuotesYear</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Active Quotes</Heading>
-                        <Text Class="text-primary">@activeQuotesTotalYear.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column> 
-           
-        </Row>
+    <MudText Typo="Typo.h5" Class="mb-3">Year to Date (@DateTime.Now.Year)</MudText>
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Info">@completedJobsYear</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Completed Jobs</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Info">@completedJobsTotalYear.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Success">@wonQuotesYear</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Won Quotes</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Success">@wonQuotesTotalYear.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Primary">@activeQuotesYear</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Active Quotes</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Primary">@activeQuotesTotalYear.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-        <!-- Statistics Cards - Current Month -->
-        <Heading Size="HeadingSize.Is4" Class="mb-3">
-            <Icon Name="IconName.Calendar" /> This Month (@DateTime.Now.ToString("MMMM yyyy"))
-        </Heading>
-        <Row Class="mb-4">
-            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-success fw-bold">@wonQuotesMonth</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Won Quotes</Heading>
-                        <Text Class="text-success">@wonQuotesTotalMonth.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column>
-            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-primary fw-bold">@activeQuotesMonth</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Active Quotes</Heading>
-                        <Text Class="text-primary">@activeQuotesTotalMonth.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column>
-            <Column ColumnSize="ColumnSize.Is4.OnDesktop.Is12.OnMobile">
-                <Card Class="h-100">
-                    <CardBody Class="text-center">
-                        <Div Class="display-4 text-info fw-bold">@completedJobsMonth</Div>
-                        <Heading Size="HeadingSize.Is5" TextColor="TextColor.Muted">Completed Jobs</Heading>
-                        <Text Class="text-info">@completedJobsTotalMonth.ToString("C")</Text>
-                    </CardBody>
-                </Card>
-            </Column>
-        </Row>
+    <MudText Typo="Typo.h5" Class="mb-3">This Month (@DateTime.Now.ToString("MMMM yyyy"))</MudText>
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Success">@wonQuotesMonth</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Won Quotes</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Success">@wonQuotesTotalMonth.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Primary">@activeQuotesMonth</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Active Quotes</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Primary">@activeQuotesTotalMonth.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="1">
+                <MudText Typo="Typo.h3" Color="MudBlazor.Color.Info">@completedJobsMonth</MudText>
+                <MudText Typo="Typo.subtitle2" Class="mud-secondary-text">Completed Jobs</MudText>
+                <MudText Typo="Typo.h6" Color="MudBlazor.Color.Info">@completedJobsTotalMonth.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-        <!-- Project Lists -->
-        <Row>
-            <!-- Won Projects -->
-            <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile" Class="mb-4">
-                <Card Class="h-100">
-                    <CardHeader Background="Background.Success" Class="text-white">
-                        <Heading Size="HeadingSize.Is5" Class="mb-0 text-white">
-                            <Icon Name="IconName.CheckCircle" /> Won Projects
-                        </Heading>
-                    </CardHeader>
-                    <CardBody Style="max-height: 400px; overflow-y: auto;">
-                        @if (wonProjects.Any())
+    <MudGrid>
+        <MudItem xs="12" md="6" Class="mb-4">
+            <MudPaper Elevation="1" Class="h-100">
+                <MudText Typo="Typo.h6" Class="pa-3" Color="MudBlazor.Color.Success">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="me-1" />Won Projects
+                </MudText>
+                <MudDivider />
+                <MudList T="ProjectDataMinimal" Dense="true" Style="max-height: 400px; overflow-y: auto;">
+                    @if (wonProjects.Any())
+                    {
+                        @foreach (var project in wonProjects)
                         {
-                            <ListGroup Flush>
-                                @foreach (var project in wonProjects)
-                                {
-                                    <ListGroupItem Clicked="@(() => NavigateToProject(project.ProjectGuid))" Style="cursor: pointer;">
-                                        <Div Class="d-flex justify-content-between align-items-center">
-                                            <Div>
-                                                <Text TextWeight="TextWeight.Bold">@project.ProjectName</Text>
-                                                <br />
-                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">@project.CustomerName</Text>
-                                            </Div>
-                                            <Div Class="text-end">
-                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">
-                                                    @project.CreatedDate.ToString("MMM d, yyyy")
-                                                </Text>
-                                                <Icon Name="IconName.ChevronRight" Class="ms-2" />
-                                            </Div>
-                                        </Div>
-                                    </ListGroupItem>
-                                }
-                            </ListGroup>
+                            <MudListItem T="ProjectDataMinimal" Class="cursor-pointer" OnClick="@(() => NavigateToProject(project.ProjectGuid))">
+                                <MudText Typo="Typo.subtitle2">@project.ProjectName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CustomerName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
+                            </MudListItem>
                         }
-                        else
-                        {
-                            <Paragraph TextColor="TextColor.Muted" Class="text-center py-3">
-                                No won projects in the last 2 months
-                            </Paragraph>
-                        }
-                    </CardBody>
-                </Card>
-            </Column>
+                    }
+                    else
+                    {
+                        <MudListItem T="ProjectDataMinimal">
+                            <MudText Typo="Typo.body2" Class="mud-secondary-text">No won projects in the last 2 months</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        </MudItem>
 
-            <!-- Pending Projects (Last 2 Months) -->
-            <Column ColumnSize="ColumnSize.Is6.OnDesktop.Is12.OnMobile" Class="mb-4">
-                <Card Class="h-100">
-                    <CardHeader Background="Background.Primary" Class="text-white">
-                        <Heading Size="HeadingSize.Is5" Class="mb-0 text-white">
-                            <Icon Name="IconName.Clock" /> Pending Projects (Last 2 Months)
-                        </Heading>
-                    </CardHeader>
-                    <CardBody Style="max-height: 400px; overflow-y: auto;">
-                        @if (pendingProjects.Any())
+        <MudItem xs="12" md="6" Class="mb-4">
+            <MudPaper Elevation="1" Class="h-100">
+                <MudText Typo="Typo.h6" Class="pa-3" Color="MudBlazor.Color.Primary">
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="me-1" />Pending Projects (Last 2 Months)
+                </MudText>
+                <MudDivider />
+                <MudList T="ProjectDataMinimal" Dense="true" Style="max-height: 400px; overflow-y: auto;">
+                    @if (pendingProjects.Any())
+                    {
+                        @foreach (var project in pendingProjects)
                         {
-                            <ListGroup Flush>
-                                @foreach (var project in pendingProjects)
-                                {
-                                    <ListGroupItem Clicked="@(() => NavigateToProject(project.ProjectGuid))" Style="cursor: pointer;">
-                                        <Div Class="d-flex justify-content-between align-items-center">
-                                            <Div>
-                                                <Text TextWeight="TextWeight.Bold">@project.ProjectName</Text>
-                                                <br />
-                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">@project.CustomerName</Text>
-                                            </Div>
-                                            <Div Class="text-end">
-                                                <Text TextColor="TextColor.Muted" TextSize="TextSize.Small">
-                                                    @project.CreatedDate.ToString("MMM d, yyyy")
-                                                </Text>
-                                                <Icon Name="IconName.ChevronRight" Class="ms-2" />
-                                            </Div>
-                                        </Div>
-                                    </ListGroupItem>
-                                }
-                            </ListGroup>
+                            <MudListItem T="ProjectDataMinimal" Class="cursor-pointer" OnClick="@(() => NavigateToProject(project.ProjectGuid))">
+                                <MudText Typo="Typo.subtitle2">@project.ProjectName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CustomerName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-secondary-text">@project.CreatedDate.ToString("MMM d, yyyy")</MudText>
+                            </MudListItem>
                         }
-                        else
-                        {
-                            <Paragraph TextColor="TextColor.Muted" Class="text-center py-3">
-                                No pending projects in the last 2 months
-                            </Paragraph>
-                        }
-                    </CardBody>
-                </Card>
-            </Column>
-        </Row>
-    }
-</LoadingIndicator>
+                    }
+                    else
+                    {
+                        <MudListItem T="ProjectDataMinimal">
+                            <MudText Typo="Typo.body2" Class="mud-secondary-text">No pending projects in the last 2 months</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
 
 @code {
-    private LoadingIndicator loadingIndicator;
+    private bool isLoading = true;
     private bool isLoaded = false;
     private string companyName = string.Empty;
     private string companyGuid = string.Empty;
@@ -228,24 +175,17 @@
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         if (!authState.User.Identity?.IsAuthenticated ?? true)
         {
-            NavigationManager.NavigateTo("Account/Login");
+            NavigationManager.NavigateTo("/login");
+            return;
         }
-    }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
+        try
         {
-            try
-            {
-                await loadingIndicator.Show();
-                await LoadDashboardData();
-            }
-            finally
-            {
-                await loadingIndicator.Hide();
-            }
-            StateHasChanged();
+            await LoadDashboardData();
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 
@@ -259,7 +199,7 @@
             if (user?.Identity?.IsAuthenticated != true)
             {
                 Logger.LogWarning("User not authenticated");
-                NavigationManager.NavigateTo("Account/Login");
+                NavigationManager.NavigateTo("/login");
                 return;
             }
 

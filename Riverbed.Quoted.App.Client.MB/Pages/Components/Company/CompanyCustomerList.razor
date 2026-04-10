@@ -105,7 +105,7 @@
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (!(authState.User?.Identity?.IsAuthenticated ?? false))
         {
-            NavigationManager.NavigateTo("Account/Login");
+            NavigationManager.NavigateTo("/login");
             return;
         }
     }
@@ -120,11 +120,11 @@
         }
     }
 
-    public void OnItemClicked(string item)
+    public async Task OnItemClicked(string item)
     {
-		loadingIndicator.Show();
+        await loadingIndicator.Show();
         NavigationManager.NavigateTo("company-customer-display/" + item);
-		loadingIndicator.Hide();
+        await loadingIndicator.Hide();
     }
 
     public void HandleNew()
