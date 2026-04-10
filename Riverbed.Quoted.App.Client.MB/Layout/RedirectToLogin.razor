@@ -3,8 +3,6 @@
 @code {
     protected override void OnInitialized()
     {
-        var currentRoute = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var returnUrl = string.IsNullOrWhiteSpace(currentRoute) ? "/" : $"/{currentRoute}";
-        Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", replace: true);
+        Navigation.NavigateTo("/login");
     }
 }

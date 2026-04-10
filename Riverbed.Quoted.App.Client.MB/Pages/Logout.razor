@@ -1,38 +1,17 @@
 @page "/logout"
-@attribute [AllowAnonymous]
-@inject ServerAuthenticationClient AuthenticationClient
-@inject AuthenticationStateProvider AuthenticationStateProvider
-@inject NavigationManager NavigationManager
-@inject ILogger<Logout> Logger
+@inject ServerAuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
 
-<PageTitle>Logging out</PageTitle>
+<PageTitle>Logout</PageTitle>
 
-<MudGrid Justify="Justify.Center" Class="mt-16">
-    <MudItem xs="12" sm="10" md="6" lg="4">
-        <MudPaper Class="pa-6" Elevation="4">
-            <MudText Typo="Typo.h6" Class="mb-2">Signing out...</MudText>
-            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+<MudPaper Class="pa-6 mx-auto mt-12" Style="max-width: 420px;">
+    <MudText Typo="Typo.h6" GutterBottom="true">Signing out...</MudText>
+</MudPaper>
 
 @code {
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            await AuthenticationClient.LogoutAsync();
-        }
-        catch (HttpRequestException ex)
-        {
-            Logger.LogWarning(ex, "Server logout request failed. Proceeding with local authentication state refresh.");
-        }
-
-        if (AuthenticationStateProvider is ServerAuthenticationStateProvider serverAuthenticationStateProvider)
-        {
-            await serverAuthenticationStateProvider.RefreshAuthenticationStateAsync();
-        }
-
-        NavigationManager.NavigateTo("/login", replace: true);
+        await AuthenticationStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }

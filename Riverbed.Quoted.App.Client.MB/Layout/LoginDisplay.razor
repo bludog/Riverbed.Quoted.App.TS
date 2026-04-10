@@ -3,10 +3,10 @@
 <AuthorizeView>
     <Authorized>
         <MudText Typo="Typo.body2" Class="d-inline mr-2">Hello, @context.User.Identity?.Name!</MudText>
-        <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="BeginLogOut">Log out</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="BeginLogOut">Log out</MudButton>
     </Authorized>
     <NotAuthorized>
-        <MudButton Variant="Variant.Text" Color="Color.Inherit" OnClick="BeginLogIn">Log in</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BeginLogIn">Log in</MudButton>
     </NotAuthorized>
 </AuthorizeView>
 

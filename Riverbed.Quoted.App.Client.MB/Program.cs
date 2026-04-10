@@ -12,31 +12,31 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 var localAuthSection = builder.Configuration.GetSection("Local");
 var apiBaseAddress = localAuthSection["ApiBaseUrl"];
 
-var serverBaseAddress = builder.HostEnvironment.BaseAddress;
-if (!string.IsNullOrWhiteSpace(apiBaseAddress) && Uri.TryCreate(apiBaseAddress, UriKind.Absolute, out var configuredApiBaseUri))
+if (string.IsNullOrWhiteSpace(apiBaseAddress))
 {
-    serverBaseAddress = configuredApiBaseUri.AbsoluteUri;
+    throw new InvalidOperationException("Web API base URL is not configured. Set Local:ApiBaseUrl in wwwroot/appsettings.json.");
+}
+
+if (!Uri.TryCreate(apiBaseAddress, UriKind.Absolute, out var apiBaseUri))
+{
+    throw new InvalidOperationException("Web API base URL is invalid. Set Local:ApiBaseUrl to an absolute URL.");
 }
 
 builder.Services.AddMudServices();
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
-builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+builder.Services.AddScoped<ServerCookieCredentialsHandler>();
 builder.Services.AddScoped<ServerAuthenticationClient>();
-builder.Services.AddTransient<ServerCookieCredentialsHandler>();
+builder.Services.AddScoped<ServerAuthenticationStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
+    sp.GetRequiredService<ServerAuthenticationStateProvider>());
 
-builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
-
-builder.Services.AddHttpClient("ServerAuth", client =>
+builder.Services.AddHttpClient("ServerAPI", client =>
     {
-        client.BaseAddress = new Uri(serverBaseAddress);
+        client.BaseAddress = apiBaseUri;
     })
     .AddHttpMessageHandler<ServerCookieCredentialsHandler>();
 
-builder.Services.AddHttpClient("AuthorizedAPI", client =>
-    {
-        client.BaseAddress = new Uri(serverBaseAddress);
-    })
-    .AddHttpMessageHandler<ServerCookieCredentialsHandler>();
+builder.Services.AddScoped(sp => sp.GetRequiredService<IHttpClientFactory>().CreateClient("ServerAPI"));
 
 await builder.Build().RunAsync();

@@ -1,133 +1,85 @@
 @page "/login"
-@attribute [AllowAnonymous]
 @using System.ComponentModel.DataAnnotations
-@inject ServerAuthenticationClient AuthenticationClient
-@inject AuthenticationStateProvider AuthenticationStateProvider
-@inject NavigationManager NavigationManager
+@inject ServerAuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
 
-<PageTitle>Log in</PageTitle>
+<PageTitle>Login</PageTitle>
 
-<MudGrid Justify="Justify.Center" Class="mt-16">
-    <MudItem xs="12" sm="10" md="6" lg="4">
-        <MudPaper Class="pa-6" Elevation="8">
-            <MudText Typo="Typo.h5" Class="mb-4">Sign in</MudText>
+<MudPaper Class="pa-6 mx-auto mt-12" Style="max-width: 420px;">
+    <MudText Typo="Typo.h5" GutterBottom="true">Sign in</MudText>
 
-            @if (!string.IsNullOrWhiteSpace(_errorMessage))
-            {
-                <MudAlert Severity="Severity.Error" Dense="true" Variant="Variant.Outlined" Class="mb-4">@_errorMessage</MudAlert>
-            }
+    <EditForm Model="_model" OnValidSubmit="HandleLoginAsync">
+        <DataAnnotationsValidator />
 
-            <EditForm Model="_input" OnValidSubmit="SubmitAsync">
-                <DataAnnotationsValidator />
+        <MudTextField Label="Email"
+                      Variant="Variant.Outlined"
+                      @bind-Value="_model.Email"
+                      For="@(() => _model.Email)"
+                      Required="true"
+                      Class="mb-4" />
 
-                <MudTextField @bind-Value="_input.Email"
-                              Label="Email"
-                              For="@(() => _input.Email)"
-                              InputType="InputType.Email"
-                              InputId="login-email"
-                              Autocomplete="username"
-                              Variant="Variant.Outlined"
-                              Immediate="true"
-                              Required="true"
-                              Class="mb-3" />
+        <MudTextField Label="Password"
+                      Variant="Variant.Outlined"
+                      InputType="InputType.Password"
+                      @bind-Value="_model.Password"
+                      For="@(() => _model.Password)"
+                      Required="true"
+                      Class="mb-2" />
 
-                <MudTextField @bind-Value="_input.Password"
-                              Label="Password"
-                              For="@(() => _input.Password)"
-                              Variant="Variant.Outlined"
-                              InputType="InputType.Password"
-                              InputId="login-password"
-                              Autocomplete="current-password"
-                              Immediate="true"
-                              Required="true"
-                              Class="mb-2" />
+        <MudCheckBox T="bool" @bind-Value="_model.RememberMe" Label="Remember me" Class="mb-4" />
 
-                <MudCheckBox @bind-Value="_input.RememberMe" Label="Remember me" Class="mb-4" />
+        @if (!string.IsNullOrWhiteSpace(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">@_errorMessage</MudAlert>
+        }
 
-                <MudButton ButtonType="ButtonType.Submit"
-                           Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           FullWidth="true"
-                           Disabled="_isSubmitting">
-                    @(_isSubmitting ? "Signing in..." : "Sign in")
-                </MudButton>
-            </EditForm>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Disabled="_isSubmitting">
+            @(_isSubmitting ? "Signing in..." : "Sign in")
+        </MudButton>
+    </EditForm>
+</MudPaper>
 
 @code {
-    private readonly LoginInputModel _input = new();
+    private readonly LoginModel _model = new();
     private bool _isSubmitting;
     private string? _errorMessage;
 
-    [SupplyParameterFromQuery(Name = "returnUrl")]
-    public string? ReturnUrl { get; set; }
-
-    protected override async Task OnInitializedAsync()
-    {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (authState.User.Identity?.IsAuthenticated == true)
-        {
-            NavigationManager.NavigateTo(GetSafeReturnUrl(), replace: true);
-        }
-    }
-
-    private async Task SubmitAsync()
+    private async Task HandleLoginAsync()
     {
         _isSubmitting = true;
         _errorMessage = null;
 
-        try
+        var response = await AuthenticationStateProvider.LoginAsync(new LoginRequest
         {
-            var loginResponse = await AuthenticationClient.LoginAsync(new LoginRequest(
-                _input.Email,
-                _input.Password,
-                _input.RememberMe));
+            Email = _model.Email,
+            Password = _model.Password,
+            RememberMe = _model.RememberMe
+        });
 
-            if (loginResponse.Succeeded)
-            {
-                if (AuthenticationStateProvider is ServerAuthenticationStateProvider serverAuthenticationStateProvider)
-                {
-                    await serverAuthenticationStateProvider.RefreshAuthenticationStateAsync();
-                }
+        _isSubmitting = false;
 
-                NavigationManager.NavigateTo(GetSafeReturnUrl(), replace: true);
-                return;
-            }
-
-            _errorMessage = loginResponse.IsLockedOut
-                ? "Your account is locked."
-                : loginResponse.RequiresTwoFactor
-                    ? "Two-factor authentication is required."
-                    : "Invalid login attempt.";
-        }
-        catch (HttpRequestException)
+        if (response.Succeeded)
         {
-            _errorMessage = "Unable to sign in at this time.";
+            Navigation.NavigateTo("/", forceLoad: true);
+            return;
         }
-        finally
+
+        if (response.IsLockedOut)
         {
-            _isSubmitting = false;
+            _errorMessage = "Your account is locked out.";
+            return;
         }
+
+        if (response.RequiresTwoFactor)
+        {
+            _errorMessage = "Two-factor authentication is required for this account.";
+            return;
+        }
+
+        _errorMessage = "Invalid login attempt.";
     }
 
-    private string GetSafeReturnUrl()
-    {
-        if (string.IsNullOrWhiteSpace(ReturnUrl))
-        {
-            return "/";
-        }
-
-        if (Uri.TryCreate(ReturnUrl, UriKind.Absolute, out _))
-        {
-            return "/";
-        }
-
-        return ReturnUrl.StartsWith('/') ? ReturnUrl : $"/{ReturnUrl}";
-    }
-
-    private sealed class LoginInputModel
+    private sealed class LoginModel
     {
         [Required]
         [EmailAddress]

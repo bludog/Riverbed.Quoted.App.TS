@@ -1,81 +1,96 @@
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components.WebAssembly.Http;
-using System.Net;
-using System.Net.Http.Json;
+using System.Security.Claims;
 
 namespace Riverbed.Quoted.App.MB.Auth;
 
 public sealed class ServerAuthenticationStateProvider : AuthenticationStateProvider
 {
-    private static readonly AuthenticationState Unauthenticated =
-        new(new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity()));
+    private static readonly AuthenticationState Anonymous =
+        new(new ClaimsPrincipal(new ClaimsIdentity()));
 
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<ServerAuthenticationStateProvider> _logger;
+    private readonly ServerAuthenticationClient _authenticationClient;
+    private CurrentUserResponse? _currentUser;
 
-    public ServerAuthenticationStateProvider(IHttpClientFactory httpClientFactory, ILogger<ServerAuthenticationStateProvider> logger)
+    public ServerAuthenticationStateProvider(ServerAuthenticationClient authenticationClient)
     {
-        ArgumentNullException.ThrowIfNull(httpClientFactory);
-        ArgumentNullException.ThrowIfNull(logger);
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+        _authenticationClient = authenticationClient;
     }
 
     public override async Task<AuthenticationState> GetAuthenticationStateAsync()
     {
-        var client = _httpClientFactory.CreateClient("ServerAuth");
+        try
+        {
+            _currentUser ??= await _authenticationClient.GetCurrentUserAsync();
+        }
+        catch
+        {
+            _currentUser = null;
+        }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "api/UserInfo/Current");
-        request.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
+        return CreateAuthenticationState(_currentUser);
+    }
+
+    public async Task<LoginResponse> LoginAsync(LoginRequest request)
+    {
+        LoginResponse loginResponse;
+        try
+        {
+            loginResponse = await _authenticationClient.LoginAsync(request);
+        }
+        catch
+        {
+            return new LoginResponse(false, false, false);
+        }
+
+        if (!loginResponse.Succeeded)
+        {
+            return loginResponse;
+        }
 
         try
         {
-            using var response = await client.SendAsync(request);
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            {
-                return Unauthenticated;
-            }
-
-            response.EnsureSuccessStatusCode();
-            var currentUser = await response.Content.ReadFromJsonAsync<CurrentUserResponse>();
-            if (currentUser is null)
-            {
-                return Unauthenticated;
-            }
-
-            var principal = new UserInfo
-            {
-                UserId = currentUser.UserId,
-                Email = currentUser.Email,
-                Roles = currentUser.Roles,
-                IsDarkMode = currentUser.IsDarkMode
-            }.ToClaimsPrincipal();
-
-            return new AuthenticationState(principal);
+            _currentUser = await _authenticationClient.GetCurrentUserAsync();
         }
-        catch (HttpRequestException ex)
+        catch
         {
-            _logger.LogWarning(ex, "Unable to retrieve the current user from the server authentication endpoint.");
-            return Unauthenticated;
+            _currentUser = null;
         }
-        catch (NotSupportedException ex)
-        {
-            _logger.LogWarning(ex, "Unable to parse server authentication payload.");
-            return Unauthenticated;
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            _logger.LogWarning(ex, "Invalid JSON returned by server authentication endpoint.");
-            return Unauthenticated;
-        }
+
+        NotifyAuthenticationStateChanged(Task.FromResult(CreateAuthenticationState(_currentUser)));
+        return loginResponse;
     }
 
-    /// <summary>
-    /// Refreshes the authentication state from the server and notifies subscribers.
-    /// </summary>
-    public Task RefreshAuthenticationStateAsync()
+    public async Task LogoutAsync()
     {
-        NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
-        return Task.CompletedTask;
+        try
+        {
+            await _authenticationClient.LogoutAsync();
+        }
+        catch
+        {
+        }
+
+        _currentUser = null;
+        NotifyAuthenticationStateChanged(Task.FromResult(Anonymous));
+    }
+
+    private static AuthenticationState CreateAuthenticationState(CurrentUserResponse? currentUser)
+    {
+        if (currentUser is null)
+        {
+            return Anonymous;
+        }
+
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, currentUser.UserId),
+            new(ClaimTypes.Name, currentUser.Email),
+            new(ClaimTypes.Email, currentUser.Email)
+        };
+
+        claims.AddRange(currentUser.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+        var identity = new ClaimsIdentity(claims, authenticationType: "ServerCookie");
+        return new AuthenticationState(new ClaimsPrincipal(identity));
     }
 }
